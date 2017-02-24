@@ -348,7 +348,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "input.wav"
+    input_filename = "spmg54_1.wav"
     coded_filename = "coded.pac"
     output_filename = "output.wav"
 

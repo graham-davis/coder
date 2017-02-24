@@ -348,9 +348,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "../input/castanets.wav"
+    input_filename = "input.wav"
     coded_filename = "coded.pac"
-    output_filename = "../output/castanets_192kbps.wav"
+    output_filename = "output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]

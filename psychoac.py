@@ -2,22 +2,27 @@ import numpy as np
 import window as w
 import scipy.stats as st
 
+MAX_SPL = 96.0
+MIN_SPL = -30.0
+
 def SPL(intensity):
     """
     Returns the SPL corresponding to intensity (in units where 1 implies 96dB)
     """
-    # get a copy of intensity
-    temp = intensity.copy
-    
-    # fix any intensities that value below the lower bound of what they should be (10^(-12.6))
-    if isinstance(temp,(int,float)) and temp < np.power(10.0,-12.6):
-        temp = np.power(10.0,-12.6)
-    elif not(isinstance(temp,(int,float))):
-        temp[temp < np.power(10.0,-12.6)] = np.power(10.0,-12.6)
 
-    spl = 96.0 + 10.0*np.log10(temp) # SPL value from intensity
-    
-    # return the resulting SPLs
+    min_intensity = Intensity(MIN_SPL)
+
+    # set intensity floor
+    if type(intensity) is np.ndarray: 
+        # Handle array input 
+        intensity[np.less(intensity, min_intensity)] = min_intensity
+    else:
+        # Handle single value input
+        if intensity < min_intensity: intensity = min_intensity
+
+    # Calculate SPL from intensity
+    spl = MAX_SPL + np.multiply(10, np.log10(intensity))
+
     return spl
 
 def Intensity(spl):

@@ -6,16 +6,14 @@ def SPL(intensity):
     """
     Returns the SPL corresponding to intensity (in units where 1 implies 96dB)
     """
-    # get a copy of intensity
-    temp = intensity.copy
     
     # fix any intensities that value below the lower bound of what they should be (10^(-12.6))
-    if isinstance(temp,(int,float)) and temp < np.power(10.0,-12.6):
-        temp = np.power(10.0,-12.6)
-    elif not(isinstance(temp,(int,float))):
-        temp[temp < np.power(10.0,-12.6)] = np.power(10.0,-12.6)
+    #if isinstance(intensity,(int,float)):
+    #    temp = np.maximum(np.power(10.0,-12.6),intensity)
+    #else:
+    #    temp = np.maximum(np.power(10.0,-12.6),intensity)
 
-    spl = 96.0 + 10.0*np.log10(temp) # SPL value from intensity
+    spl = 96.0 + 10.0*np.log10(np.maximum(np.power(10.0,-12.6),intensity)) # SPL value from intensity
     
     # return the resulting SPLs
     return spl
@@ -30,15 +28,16 @@ def Thresh(f):
     """Returns the threshold in quiet measured in SPL at frequency f (in Hz)"""
 
     # if f is a single number less than 10, replace with 10
-    if isinstance(f,(int,float)) and f < 10.0:
-        f = 10.0
+    tempf = np.maximum(10.0,f)
+    #if isinstance(f,(int,float)) and f < 10.0:
+    #    f = 10.0
     # replace any f values less than 10 with 10
-    elif not(isinstance(f,(int,float))):
-        f[f < 10.0] = 10.0
+    #elif not(isinstance(f,(int,float))):
+    #    f[f < 10.0] = 10.0
 
     # threshold equation as taken from pg. 155
-    return  3.64*np.power(f/1000.0,-0.8)-6.5*np.exp(-0.6*np.power(f/1000.0-3.3,2.0))+\
-np.power(10.0,-3.0)*np.power(f/1000.0,4)
+    return  3.64*np.power(tempf/1000.0,-0.8)-6.5*np.exp(-0.6*np.power(tempf/1000.0-3.3,2.0))+\
+np.power(10.0,-3.0)*np.power(tempf/1000.0,4)
 
 def Bark(f):
     """Returns the bark-scale frequency for input frequency f (in Hz) """
@@ -222,6 +221,7 @@ def getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands):
         else:
             cbNoiseSpl[i] = SPL(np.sum(XiNoise[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]))
         # compute freq from geometric mean
+        # Francois recommends use intesity weighting to calculate noise masker center freq
         cbNoiseFreq[i] = st.gmean(f[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
         # put zero back afterwards
         if i == 0:

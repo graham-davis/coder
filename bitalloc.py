@@ -7,8 +7,12 @@ def BitAllocUniform(bitBudget, maxMantBits, nBands, nLines, SMR=None):
     gives the allocation of mantissa bits in each scale factor band when
     bits are uniformely distributed for the mantissas.
     """
-
-    return np.array([3,3,3,3,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,2,3,3,2,2])
+    if bitBudget == 2526:
+        array = [4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,2,2,2]
+    else:
+        array = [5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,3]
+        
+    return array
 
 def BitAllocConstSNR(bitBudget, maxMantBits, nBands, nLines, peakSPL):
     """
@@ -18,7 +22,12 @@ def BitAllocConstSNR(bitBudget, maxMantBits, nBands, nLines, peakSPL):
     quantization noise floor (assuming a noise floor 6 dB per bit below
     the peak SPL line in the scale factor band).
     """
-    return np.array([6,7,7,9,12,11,9,9,8,5,4,4,4,4,3,4,4,8,9,2,0,9,3,0,0])
+    if bitBudget == 2526:
+        array = np.array([0,0,9,15,16,16,16,15,11,2,0,0,0,0,0,0,0,13,14,0,0,14,0,0,0])
+    else:
+        array = np.array([3,6,13,16,16,16,16,16,16,5,2,2,2,2,2,2,2,16,16,2,2,16,2,2,0])
+        
+    return array
 
 def BitAllocConstMNR(bitBudget, maxMantBits, nBands, nLines, SMR):
     """
@@ -29,8 +38,12 @@ def BitAllocConstMNR(bitBudget, maxMantBits, nBands, nLines, SMR):
     masked threshold curve (assuming a quantization noise floor 6 dB per
     bit below the peak SPL line in the scale factor band).
     """
-
-    return np.array([7,10,8,5,6,5,5,5,6,5,7,8,9,10,10,10,7,7,7,2,0,6,2,0,0])
+    if bitBudget == 2526:
+        array = np.array([0,4,10,11,12,11,11,11,9,2,0,2,3,4,4,4,0,12,13,0,0,13,0,0,0])
+    else:
+        array = np.array([3,8,13,15,15,14,15,14,13,5,4,5,7,7,7,7,4,15,15,2,2,15,0,2,0])
+        
+    return array
 
 # Question 1.c)
 def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
@@ -56,38 +69,99 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
            which case we set R(i)=maxMantBits).  (Note: 1 Mantissa bit is
            equivalent to 0 mantissa bits when you are using a midtread quantizer.)
            We will not bother to worry about slight variations in bit budget due
-           to rounding of the above equation to integer values of R(i).
+           rounding of the above equation to integer values of R(i).
     """
+    ########################### old version of code ##########################################
+#    # constant to multiply by
+#    C = np.log(10.0)/(20.0*np.log(2.0))
+#    # automatically calculate bitAlloc
+#    bitAlloc = np.round(bitBudget/(np.sum(nLines)) + C*(SMR-np.mean(SMR)),0)
+#    # zero out anything less than 2
+#    bitAlloc =  (bitAlloc >= 2)*bitAlloc
+#    # make anything greater than 16 equal to 16
+#    bitAlloc = bitAlloc-(bitAlloc - 16)*(bitAlloc > 16)
+#
+#    # add back bits while there are bits to add
+#    while True:
+#        ind = np.argmin(6*bitAlloc-SMR)
+#        if bitAlloc[ind] == 0:
+#            bitAdd = 2
+#        else:
+#            bitAdd = 1
+#        bitAlloc[ind] += bitAdd
+#        if bitBudget < np.sum(bitAlloc*nLines):
+#            bitAlloc[ind] -= bitAdd
+#            break
+#    # remove bits while there are bits to remove
+#    while True:    
+#        nonZeroInds = np.squeeze(np.nonzero(np.logical_not(np.in1d(bitAlloc,0))*np.arange(len(bitAlloc))))
+#        maxInd = nonZeroInds[np.argmin(nLines[nonZeroInds])]
+#        if bitAlloc[maxInd] > 2:
+#            bitAlloc[maxInd] -= 1
+#        else:
+#            bitAlloc[maxInd] == 0
+#        if bitBudget > np.sum(bitAlloc*nLines):
+#            break
 
-    # Initialize MNR vector
-    constantMNR = np.zeros(nBands)
+    # constant to multiply by (6 dB rule)
+    C = np.log(10.0)/(20.0*np.log(2.0))
+    # perform first calculation using optimized formula
+    bitAllocTemp = bitBudget/(np.sum(nLines)) + C*(SMR-np.mean(SMR))
+    # locate indexes any non-positive values
+    zInd = np.squeeze(np.where(bitAllocTemp<=0.0))
+    # locate indexes of positive values
+    nzInd = np.squeeze(np.where(bitAllocTemp>0.0))
 
-    # Loop until bit budget is empty/no more bits can be added
-    while(bitBudget > 0):
-      # Calc noise floor as SMR - 6dB/bit in each band, order in descending order
-      noiseFloor = (SMR - np.multiply(constantMNR, 6)).argsort()[::-1]
-      bitAdded = False
-      for n in noiseFloor:
-        # If bit budget allows, add bit
-        if nLines[n] <= bitBudget:
-          bitBudget -= nLines[n]
-          constantMNR[n] += 1
-          bitAdded = True
-          break
-      # End loop if no bits were added
-      if not bitAdded: break
+    # counter that will help prevent infinite loop
+    # we don't need to loop more than the number of
+    # remaining non-zero bands as that would mean that
+    # the algorithm got stuff returning negative value(s)
+    i = nBands - len(bitAllocTemp[zInd])
+    # loop to continue optimized bit allocation
+    while True:
+        # recompute bit allocation based on number/size of non-zero bands
+        bitAllocTemp = bitBudget/(np.sum(nLines[nzInd])) + C*(SMR[nzInd]-np.mean(SMR[nzInd]))
+        # check for non-positive bit allocations
+        zInd = np.squeeze(np.where(bitAllocTemp<=0.0))
+        # it none or we've exceeded loop time, exit
+        if len(zInd) == 0 or i <= 0:
+            break
+        else:
+            # get the correct indexes of the positive bit allocation bands
+            nzInd = nzInd[np.squeeze(np.where(bitAllocTemp>0.0))]
+            # decrement the counter
+            i -= 1
 
-    # Handle any single, negative or over maxMantBits
-    constantMNR[np.equal(constantMNR, 1)] -= 1
-    constantMNR[np.less(constantMNR, 0)] = 0
-    constantMNR[np.greater(constantMNR, maxMantBits)] = maxMantBits
+    # allocate array to hold final bit allocation
+    bitAlloc = np.zeros(nBands)
+    # set the positive values using the floor of values returned by allocation algorithm
+    bitAlloc[nzInd] = np.floor(bitAllocTemp)
+    # make sure values are in valid range
+    bitAlloc[np.where(np.logical_and(bitAlloc > 0.0, bitAlloc < 2.0))] = 0
+    bitAlloc[np.where(bitAlloc > maxMantBits)] = maxMantBits
 
-    return constantMNR.astype(int)
+    # if we're still over bit budget, we need to remove bits
+    while np.sum(bitAlloc*nLines) > bitBudget:
+        # get the nonzero indexes
+        nzInd = np.squeeze(np.where(bitAlloc > 0))
+        # calculate their NMRs
+        NMRs = 6*bitAlloc[nzInd]-SMR[nzInd]
+        # find the largest one
+        maxInd = nzInd[np.argmax(6*bitAlloc[nzInd]-SMR[nzInd])]    
+        # reduce it by the correct amount
+        if bitAlloc[maxInd] > 2:
+            # larger than 2, subtract 1
+            bitAlloc[maxInd] -= 1
+            # less than or equal to 2, set to 0
+        else:
+            bitAlloc[maxInd] == 0
+
+    # return the final allocation
+    return bitAlloc.astype(int)
+
 #-----------------------------------------------------------------------------
 
 #Testing code
 if __name__ == "__main__":
-  pass
 
-
-
+    pass # TO REPLACE WITH YOUR CODE

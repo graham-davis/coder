@@ -118,7 +118,6 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     # the algorithm got stuff returning negative value(s)
 
     #print zInd,zInd.size
-    #i = nBands - len(bitAllocTemp[zInd])
     i = nBands - zInd.size
 
     # loop to continue optimized bit allocation
@@ -144,6 +143,28 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     bitAlloc[np.where(np.logical_and(bitAlloc > 0.0, bitAlloc < 2.0))] = 0
     bitAlloc[np.where(bitAlloc > maxMantBits)] = maxMantBits
 
+    # if we're under bit budget, we need to add bits
+    availBits = np.arange(nBands) # keep track of bands where bits can be added
+        
+    bitAllocTemp = np.copy(bitAlloc)
+
+    while np.sum(bitAllocTemp*nLines) < bitBudget  and availBits.size > 0:
+        NMRs = 6*bitAllocTemp[availBits]-SMR[availBits]
+        # find the smallest one
+        minInd = availBits[np.argmin(NMRs)]
+        
+        if bitAllocTemp[minInd] == 0:
+            bitChange = 2
+        else:
+            bitChange = 1
+        
+        if np.sum(bitAllocTemp*nLines)+bitChange*nLines[minInd] < bitBudget:
+            bitAllocTemp[minInd] += bitChange
+        else:
+            availBits = np.delete(availBits,np.where(availBits == minInd))
+
+    bitAlloc = np.copy(bitAllocTemp)
+
     # if we're still over bit budget, we need to remove bits
     while np.sum(bitAlloc*nLines) > bitBudget:
         # get the nonzero indexes
@@ -152,6 +173,7 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         NMRs = 6*bitAlloc[nzInd]-SMR[nzInd]
         # find the largest one
         maxInd = nzInd[np.argmax(6*bitAlloc[nzInd]-SMR[nzInd])]    
+        #print np.sum(bitAlloc*nLines), bitBudget, nzInd, maxInd, bitAlloc[maxInd]
         # reduce it by the correct amount
         if bitAlloc[maxInd] > 2:
             # larger than 2, subtract 1

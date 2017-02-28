@@ -116,7 +116,11 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     # we don't need to loop more than the number of
     # remaining non-zero bands as that would mean that
     # the algorithm got stuff returning negative value(s)
-    i = nBands - len(bitAllocTemp[zInd])
+
+    #print zInd,zInd.size
+    #i = nBands - len(bitAllocTemp[zInd])
+    i = nBands - zInd.size
+
     # loop to continue optimized bit allocation
     while True:
         # recompute bit allocation based on number/size of non-zero bands
@@ -124,7 +128,7 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         # check for non-positive bit allocations
         zInd = np.squeeze(np.where(bitAllocTemp<=0.0))
         # it none or we've exceeded loop time, exit
-        if len(zInd) == 0 or i <= 0:
+        if zInd.size == 0 or i <= 0:
             break
         else:
             # get the correct indexes of the positive bit allocation bands
@@ -154,7 +158,7 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
             bitAlloc[maxInd] -= 1
             # less than or equal to 2, set to 0
         else:
-            bitAlloc[maxInd] == 0
+            bitAlloc[maxInd] = 0
 
     # return the final allocation
     return bitAlloc.astype(int)

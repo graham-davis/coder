@@ -348,9 +348,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "spmg54_1.wav"
+    input_filename = "Audio/spmg54_1.wav"
     coded_filename = "coded.pac"
-    output_filename = "output.wav"
+    output_filename = "Output/output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -385,7 +385,7 @@ if __name__=="__main__":
             codingParams.nMDCTLines = 1024
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
-            codingParams.targetBitsPerSample = 4.35
+            codingParams.targetBitsPerSample = 2.9
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
         else: # "Decode"
@@ -398,19 +398,28 @@ if __name__=="__main__":
         outFile.OpenForWriting(codingParams) # (includes writing header)
 
         # Read the input file and pass its data to the output file to be written
-        firstBlock = True  # when de-coding, we won't write the first block to the PCM file. This flag signifies that
+        currentBlock=inFile.ReadDataBlock(codingParams)     # Read first data block to currentBlock
+        firstBlock = True                                   # Set first block
+
         while True:
-            data=inFile.ReadDataBlock(codingParams)
-            if not data: break  # we hit the end of the input file
+            if not currentBlock: break  # we hit the end of the input file
+
+            # Read next data block
+            nextBlock=inFile.ReadDataBlock(codingParams)
 
             # don't write the first PCM block (it corresponds to the half-block delay introduced by the MDCT)
             if firstBlock and Direction == "Decode":
                 firstBlock = False
+                currentBlock = nextBlock
                 continue
 
-            outFile.WriteDataBlock(data,codingParams)
+            outFile.WriteDataBlock(currentBlock,codingParams)
             sys.stdout.write(".")  # just to signal how far we've gotten to user
             sys.stdout.flush()
+
+            # Update currentBlock
+            currentBlock = nextBlock
+
         # end loop over reading/writing the blocks
 
         # close the files

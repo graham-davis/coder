@@ -388,6 +388,12 @@ if __name__=="__main__":
             codingParams.targetBitsPerSample = 2.9
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
+            # Set block state
+            #   0 - long block
+            #   1 - short block
+            #   2 - start transition block
+            #   3 - end transition block
+            codingParams.state = 0
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16

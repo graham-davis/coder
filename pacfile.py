@@ -105,6 +105,7 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
+from transient import IsTransient
 import sys
 
 import numpy as np  # to allow conversion of data blocks to numpy's array object
@@ -333,13 +334,6 @@ class PACFile(AudioFile):
         #Passes decoding logic to the Decode function defined in the codec module
         return codec.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
 
-
-
-
-
-
-
-
 #-----------------------------------------------------------------------------
 
 # Testing the full PAC coder (needs a file called "input.wav" in the code directory)
@@ -348,7 +342,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/spmg54_1.wav"
+    input_filename = "Audio/castanets_short.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 
@@ -390,9 +384,9 @@ if __name__=="__main__":
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # Set block state
             #   0 - long block
-            #   1 - short block
-            #   2 - start transition block
-            #   3 - end transition block
+            #   1 - start transition
+            #   2 - short block
+            #   3 - stop transition
             codingParams.state = 0
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
@@ -404,27 +398,45 @@ if __name__=="__main__":
         outFile.OpenForWriting(codingParams) # (includes writing header)
 
         # Read the input file and pass its data to the output file to be written
-        currentBlock=inFile.ReadDataBlock(codingParams)     # Read first data block to currentBlock
+        previousBlock = []                                  # Initialize previous block
         firstBlock = True                                   # Set first block
-
+        
         while True:
-            if not currentBlock: break  # we hit the end of the input file
-
             # Read next data block
-            nextBlock=inFile.ReadDataBlock(codingParams)
+            currentBlock=inFile.ReadDataBlock(codingParams)
+            if not currentBlock: break  # we hit the end of the input file
 
             # don't write the first PCM block (it corresponds to the half-block delay introduced by the MDCT)
             if firstBlock and Direction == "Decode":
                 firstBlock = False
-                currentBlock = nextBlock
-                continue
+                continue 
 
+            # Only handle state transitions if we are encoding
+            if Direction == "Encode":
+                if previousBlock:
+                    # Check for transient in currentBlock
+                    if IsTransient(previousBlock[0], currentBlock[0]):
+                        # Start transition window
+                        if codingParams.state == 0 or codingParams.state == 3:
+                            codingParams.state = 1
+                        # Continue short block
+                        else:
+                            codingParams.state = 2
+                    # No transient in current block
+                    else:
+                        # Begin end transition if current state is short block
+                        if codingParams.state == 2 or codingParams.state == 1:
+                            codingParams.state = 3
+                        # Stay at long window
+                        else: 
+                            codingParams.state = 0
+
+                # Update previousBlock
+                previousBlock = currentBlock
+                    
             outFile.WriteDataBlock(currentBlock,codingParams)
             sys.stdout.write(".")  # just to signal how far we've gotten to user
             sys.stdout.flush()
-
-            # Update currentBlock
-            currentBlock = nextBlock
 
         # end loop over reading/writing the blocks
 

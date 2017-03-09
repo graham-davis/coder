@@ -348,9 +348,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "spmg54_1.wav"
+    input_filename = "Audio/quar48_1.wav"
     coded_filename = "coded.pac"
-    output_filename = "output.wav"
+    output_filename = "Output/quar48_1_bitres.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -385,7 +385,7 @@ if __name__=="__main__":
             codingParams.nMDCTLines = 1024
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
-            codingParams.targetBitsPerSample = 4.35
+            codingParams.targetBitsPerSample = 2.9
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLines
             # Set block state
@@ -394,6 +394,8 @@ if __name__=="__main__":
             #   2 - start transition block
             #   3 - end transition block
             codingParams.state = 0
+            # Initialize bit reservoir
+            codingParams.reservoir = 0
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16

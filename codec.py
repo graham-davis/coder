@@ -66,7 +66,6 @@ def Encode(data,codingParams):
 
 def EncodeSingleChannel(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
-
     # prepare various constants
     halfN = codingParams.nMDCTLines
     N = 2*halfN
@@ -74,14 +73,12 @@ def EncodeSingleChannel(data,codingParams):
     maxMantBits = (1<<codingParams.nMantSizeBits)  # 1 isn't an allowed bit allocation so n size bits counts up to 2^n
     if maxMantBits>16: maxMantBits = 16  # to make sure we don't ever overflow mantissa holders
     sfBands = codingParams.sfBands
-    # vectorizing the Mantissa function call
-#    vMantissa = np.vectorize(Mantissa)
 
     # compute target mantissa bit budget for this block of halfN MDCT mantissas
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
-
+    bitBudget += codingParams.reservoir # add reservoir bits to bit budget
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
@@ -93,11 +90,12 @@ def EncodeSingleChannel(data,codingParams):
     overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroes don't depend on nMantBits
     mdctLines *= (1<<overallScale)
 
-    # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
     # perform bit allocation using SMR results
     bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+    # calculate rollover bits for bit reservoir
+    codingParams.reservoir = bitBudget - np.sum(np.multiply(bitAlloc, sfBands.nLines))
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)

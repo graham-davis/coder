@@ -342,7 +342,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/castanets_short.wav"
+    input_filename = "Audio/castanets.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 
@@ -376,7 +376,7 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 1024
+            codingParams.nMDCTLines = 128
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
             codingParams.targetBitsPerSample = 2.9

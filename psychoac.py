@@ -148,12 +148,21 @@ class ScaleFactorBands:
         self.nLines = np.array(nLines)
         # number of bands is the size of nLines
         self.nBands = len(nLines)
-        # lower line is the cummulative sum of the values in nLines minus the values
-        # in nLines
-        self.lowerLine = np.cumsum(nLines)-nLines
-        # upper line is the cummulative sum of the values in nLines minus 1
-        self.upperLine = np.maximum(0,np.cumsum(nLines)-1)
-
+        
+        # initialize lowerLine and upperLine
+        self.lowerLine = np.zeros(25,np.int32)
+        self.upperLine = np.zeros(25,np.int32)
+        # current line variable
+        startInd = 0
+        # loop through and compute line indexes
+        for i in range(self.nBands):
+            if self.nLines[i] == 0:
+                self.lowerLine[i] = -1
+                self.upperLine[i] = -1
+            else:
+                self.lowerLine[i] = startInd
+                self.upperLine[i] = startInd + self.nLines[i]-1
+                startInd = self.upperLine[i]+1
 
 def getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands):
     """

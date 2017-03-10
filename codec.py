@@ -105,14 +105,15 @@ def EncodeSingleChannel(data,codingParams):
     mantissa=np.empty(nMant,dtype=np.int32)
     iMant=0
     for iBand in range(sfBands.nBands):
-        lowLine = sfBands.lowerLine[iBand]
-        highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
         nLines= sfBands.nLines[iBand]
-        scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
-        scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
-        if bitAlloc[iBand]:
-            mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
-            iMant += nLines
+        if nLines:      # Only encode mantissas if lines exist in current band
+            lowLine = sfBands.lowerLine[iBand]
+            highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
+            scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
+            scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
+            if bitAlloc[iBand]:
+                mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+                iMant += nLines
     # end of loop over scale factor bands
 
     # return results

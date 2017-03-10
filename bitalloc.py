@@ -76,7 +76,8 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     C = np.log(10.0)/(20.0*np.log(2.0))
     # perform first calculation using optimized formula
     bitAllocTemp = bitBudget/(np.sum(nLines)) + C*(SMR-np.mean(SMR))
-    # Zero out bands with no lines
+
+    # Zeros out bands with no lines
     bitAllocTemp[np.where(nLines == 0)] = 0
     # locate indexes any non-positive values
     zInd = np.squeeze(np.where(bitAllocTemp<=0.0))

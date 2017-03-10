@@ -86,13 +86,13 @@ def Encode(data,codingParams):
 
 def EncodeSingleChannel(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
-
     # prepare various constants
     N = codingParams.a + codingParams.b
     halfN = N/2
     nScaleBits = codingParams.nScaleBits
     maxMantBits = (1<<codingParams.nMantSizeBits)  # 1 isn't an allowed bit allocation so n size bits counts up to 2^n
     if maxMantBits>16: maxMantBits = 16  # to make sure we don't ever overflow mantissa holders
+
     if codingParams.state == 0:
         sfBands = codingParams.sfBandsLong
     elif codingParams.state == 1 or codingParams.state == 3:
@@ -107,6 +107,7 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
+    bitBudget += codingParams.reservoir # add reservoir bits to bit budget
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
@@ -122,11 +123,12 @@ def EncodeSingleChannel(data,codingParams):
     overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroes don't depend on nMantBits
     mdctLines *= (1<<overallScale)
 
-    # compute the mantissa bit allocations
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
     # perform bit allocation using SMR results
     bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+    # calculate rollover bits for bit reservoir
+    codingParams.reservoir = bitBudget - np.sum(np.multiply(bitAlloc, sfBands.nLines))
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
@@ -136,14 +138,15 @@ def EncodeSingleChannel(data,codingParams):
     mantissa=np.empty(nMant,dtype=np.int32)
     iMant=0
     for iBand in range(sfBands.nBands):
-        lowLine = sfBands.lowerLine[iBand]
-        highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
         nLines= sfBands.nLines[iBand]
-        scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
-        scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
-        if bitAlloc[iBand]:
-            mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
-            iMant += nLines
+        if nLines:      # Only encode mantissas if lines exist in current band
+            lowLine = sfBands.lowerLine[iBand]
+            highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
+            scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
+            scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
+            if bitAlloc[iBand]:
+                mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+                iMant += nLines
     # end of loop over scale factor bands
 
     # return results

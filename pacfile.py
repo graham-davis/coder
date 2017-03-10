@@ -477,9 +477,10 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
+
             codingParams.nMDCTLinesLong = 1024
-            codingParams.nMDCTLinesShort = 256
-            codingParams.nMDCTLinesTrans = (1024+256)/2
+            codingParams.nMDCTLinesShort = 128
+            codingParams.nMDCTLinesTrans = (codingParams.nMDCTLinesLong+codingParams.nMDCTLinesShort)/2
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
 	    dataRate = 128000
@@ -491,9 +492,9 @@ if __name__=="__main__":
             #   1 - start transition
             #   2 - short block
             #   3 - stop transition
-            codingParams.state = 0 #= []
-            #for iCh in range(codingParams.nChannels):
-            #    codingParams.state.append( 0 )
+            codingParams.state = 0
+            # Initialize bit reservoir
+            codingParams.reservoir = 0
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16

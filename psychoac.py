@@ -318,7 +318,7 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
 
     # calculate the masking threshold
     threshold = getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands)
-    
+   
     # array to hold SMR values
     SMRs = np.zeros(len(sfBands.nLines))
     # compute the SMR values

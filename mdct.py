@@ -86,7 +86,6 @@ def MDCT(data, a, b, isInverse=False):
     else:
         # Initialize result array
         result = np.zeros(N/2)
-
         # Compute pre-twiddle
         y = np.multiply(data, np.exp(np.divide(np.multiply(-1j*2*np.pi, n), 2*N)))
 

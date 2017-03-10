@@ -105,11 +105,8 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
-<<<<<<< HEAD
 from huffman import HuffmanNode
-=======
 from transient import IsTransient
->>>>>>> mike_help
 import sys
 
 import cPickle as pickle
@@ -384,7 +381,7 @@ if __name__=="__main__":
         if Direction == "Encode":
             # set additional parameters that are needed for PAC file
             # (beyond those set by the PCM file on open)
-            codingParams.nMDCTLines = 128
+            codingParams.nMDCTLines = 1024
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
             codingParams.targetBitsPerSample = 2.9

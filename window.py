@@ -16,6 +16,28 @@ def SineWindow(dataSampleArray):
     windowed_data = window * dataSampleArray
     return  windowed_data
 
+def TransitionSineWindow(dataSampleArray,a,b):
+    """
+    Returns a copy of the dataSampleArray sine-windowed with
+    a sine window of length a+b where a+b=len(dataSampleArray).
+    a = left-half length, b = right-half length
+    """
+    # verify that a+b = n_Num
+    if a + b != len(dataSampleArray):
+        raise ValueError("a+b must equal length of dataSampleArray")
+
+    # build window and then window data
+    n_Num = 2*a
+    n_Num2 = 2*b
+    n = np.arange(a)
+    n2 = np.arange(b)+b
+    window1 = np.sin(np.pi * (n + 0.5) / n_Num)
+    window2 = np.sin(np.pi * (n2 + 0.5) / n_Num2)
+    window = np.append(window1,window2)
+    windowed_data = window * dataSampleArray
+    return windowed_data
+        
+    
 def HanningWindow(dataSampleArray):
     """
     Returns a copy of the dataSampleArray Hanning-windowed
@@ -42,10 +64,33 @@ def KBDWindow(dataSampleArray,alpha=4.):
     w_kb = np.i0(np.pi * alpha * np.sqrt(1.0 - np.square(w_kb * 2.0 / half_n_Num - 1.0))) / np.i0(np.pi * alpha)
     window = np.zeros(n_Num)
     window[0 : half_n_Num] = np.sqrt(np.cumsum(np.square(w_kb[0 : half_n_Num])) / np.sum(np.square(w_kb)))
-    window[half_n_Num : n_Num] = window[0 : half_n_Num][::-1]   # Reverse
+    window[half_n_Num : n_Num] = window[0 : half_n_Num][::-1] # Reverse
     windowed_data = window * dataSampleArray
     return windowed_data
 
+def TransitionKBDWindow(dataSampleArray,a,b,alpha=4):
+    """
+    Returns a copy of the dataSampleArray KBD-windowed with
+    a KBD window of length a+b where a+b=len(dataSampleArray).
+    a = left-half length, b = right-half length
+    """
+    # verify that a+b = n_Num
+    if a + b != len(dataSampleArray):
+        raise ValueError("a+b must equal length of dataSampleArray")
+    
+    # build window and then window data
+    n_Num = 2*a
+    n_Num2 = 2*b
+    w_kb = np.arange(a + 1)
+    w_kb = np.i0(np.pi * alpha * np.sqrt(1.0 - np.square(w_kb * 2.0 / a - 1.0))) / np.i0(np.pi * alpha)
+    w_kb2 = np.arange(b + 1)
+    w_kb2 = np.i0(np.pi * alpha * np.sqrt(1.0 - np.square(w_kb2 * 2.0 / b - 1.0))) / np.i0(np.pi * alpha)
+    window1 = np.sqrt(np.cumsum(np.square(w_kb[0 : a])) / np.sum(np.square(w_kb)))
+    window2 = np.sqrt(np.cumsum(np.square(w_kb2[0 : b])) / np.sum(np.square(w_kb2)))
+    window = np.append(window1,window2[::-1])
+    windowed_data = window * dataSampleArray
+    return windowed_data
+    
 #-----------------------------------------------------------------------------
 
 #Testing code

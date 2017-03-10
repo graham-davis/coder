@@ -9,7 +9,7 @@ codec.py -- The actual encode/decode functions for the perceptual audio codec
 import numpy as np  # used for arrays
 
 # used by Encode and Decode
-from window import SineWindow  # current window used for MDCT -- implement KB-derived?
+from window import SineWindow,TransitionSineWindow # current window used for MDCT -- implement KB-derived?
 from mdct import MDCT,IMDCT  # fast MDCT implementation (uses numpy FFT)
 from quantize import *  # using vectorized versions (to use normal versions, uncomment lines 18,67 below defining vMantissa and vDequantize)
 
@@ -23,16 +23,35 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
     signed-fraction data based on the parameters in a PACFile object"""
 
     rescaleLevel = 1.*(1<<overallScaleFactor)
-    halfN = codingParams.nMDCTLines
-    N = 2*halfN
+    if codingParams.state == 0:
+        codingParams.a = codingParams.nMDCTLinesLong
+        codingParams.b = codingParams.nMDCTLinesLong
+        sfBands = codingParams.sfBandsLong
+    elif codingParams.state == 1:
+        codingParams.a = codingParams.nMDCTLinesLong
+        codingParams.b = codingParams.nMDCTLinesShort
+        sfBands = codingParams.sfBandsTrans
+    elif codingParams.state == 2:
+        codingParams.a = codingParams.nMDCTLinesShort
+        codingParams.b = codingParams.nMDCTLinesShort
+        sfBands = codingParams.sfBandsShort
+    else:
+        codingParams.a = codingParams.nMDCTLinesShort
+        codingParams.b = codingParams.nMDCTLinesLong
+        sfBands = codingParams.sfBandsTrans
+        
+    N = codingParams.a + codingParams.b
+    halfN = N/2
+    #halfN = codingParams.nMDCTLines
+    #N = 2*halfN
     # vectorizing the Dequantize function call
 #    vDequantize = np.vectorize(Dequantize)
 
     # reconstitute the first halfN MDCT lines of this channel from the stored data
     mdctLine = np.zeros(halfN,dtype=np.float64)
     iMant = 0
-    for iBand in range(codingParams.sfBands.nBands):
-        nLines =codingParams.sfBands.nLines[iBand]
+    for iBand in range(sfBands.nBands):
+        nLines = sfBands.nLines[iBand]
         if bitAlloc[iBand]:
             mdctLine[iMant:(iMant+nLines)]=vDequantize(scaleFactor[iBand], mantissa[iMant:(iMant+nLines)],codingParams.nScaleBits, bitAlloc[iBand])
         iMant += nLines
@@ -40,7 +59,11 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
 
 
     # IMDCT and window the data for this channel
-    data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
+    #data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
+    if codingParams.state == 0 or codingParams.state == 2:
+        data = SineWindow( IMDCT(mdctLine, halfN, halfN) )
+    else:
+        data = TransitionSineWindow( IMDCT(mdctLine, codingParams.a, codingParams.b),codingParams.a,codingParams.b)
 
     # end loop over channels, return reconstituted time samples (pre-overlap-and-add)
     return data
@@ -60,6 +83,7 @@ def Encode(data,codingParams):
         bitAlloc.append(b)
         mantissa.append(m)
         overallScaleFactor.append(o)
+
     # return results bundled over channels
     return (scaleFactor,bitAlloc,mantissa,overallScaleFactor)
 
@@ -68,12 +92,20 @@ def EncodeSingleChannel(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
 
     # prepare various constants
-    halfN = codingParams.nMDCTLines
-    N = 2*halfN
+    #halfN = codingParams.nMDCTLines
+    #N = 2*halfN
+    N = codingParams.a + codingParams.b
+    halfN = N/2
     nScaleBits = codingParams.nScaleBits
     maxMantBits = (1<<codingParams.nMantSizeBits)  # 1 isn't an allowed bit allocation so n size bits counts up to 2^n
     if maxMantBits>16: maxMantBits = 16  # to make sure we don't ever overflow mantissa holders
-    sfBands = codingParams.sfBands
+    if codingParams.state == 0:
+        sfBands = codingParams.sfBandsLong
+    elif codingParams.state == 1 or codingParams.state == 3:
+        sfBands = codingParams.sfBandsTrans
+    else:
+        sfBands = codingParams.sfBandsShort
+
     # vectorizing the Mantissa function call
 #    vMantissa = np.vectorize(Mantissa)
 
@@ -82,11 +114,14 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
 
-
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
-    mdctTimeSamples = SineWindow(data)
-    mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
+    if codingParams.state == 0 or codingParams.state == 2:
+        mdctTimeSamples = SineWindow(data)
+        mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
+    else:
+        mdctTimeSamples = TransitionSineWindow(data,codingParams.a,codingParams.b)
+        mdctLines = MDCT(mdctTimeSamples, codingParams.a, codingParams.b)[:halfN]
 
     # compute overall scale factor for this block and boost mdctLines using it
     maxLine = np.max( np.abs(mdctLines) )

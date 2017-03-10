@@ -315,11 +315,17 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
 
     # calculate the masking threshold
     threshold = getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands)
-    
+   
+    #print "MDCTDataSpl size: ", MDCTdataSpl.size, "threshold size: ", threshold.size,\
+    #        "sfBands size: ", sfBands.nLines.size
+
     # array to hold SMR values
     SMRs = np.zeros(len(sfBands.nLines))
     # compute the SMR values
     for i in range(len(sfBands.nLines)):
+        #if i == 23:
+            #print sfBands.lowerLine[i],sfBands.upperLine[i] + 1
+            #print threshold[sfBands.lowerLine[i]:sfBands.upperLine[i] + 1]
         SMRs[i] = np.max(MDCTdataSpl[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])-\
                          np.min(threshold[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
 

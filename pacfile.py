@@ -105,7 +105,7 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
-from huffman import HuffmanNode
+from huffman import HuffmanNode, buildFrequencyTable, buildEncodingTree, buildEncodingMap
 from transient import IsTransient
 import sys
 
@@ -262,6 +262,10 @@ class PACFile(AudioFile):
         # for each channel, write the data to the output file
         for iCh in range(codingParams.nChannels):
 
+            # Build frequency table
+            if codingParams.buildTable:
+                codingParams.freqTable = buildFrequencyTable(codingParams.freqTable, mantissa[iCh])
+
             # determine the size of this channel's data block and write it to the output file
             nBytes = codingParams.nScaleBits  # bits for overall scale factor
             for iBand in range(codingParams.sfBands.nBands): # loop over each scale factor band to get its bits
@@ -293,7 +297,7 @@ class PACFile(AudioFile):
                 pb.WriteBits(scaleFactor[iCh][iBand],codingParams.nScaleBits)  # scale factor for this band (if bit allocation non-zero)
                 if bitAlloc[iCh][iBand]:
                     for j in range(codingParams.sfBands.nLines[iBand]):
-                        pb.WriteBits(mantissa[iCh][iMant+j],bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
+                        pb.WriteBits(mantissa[iCh][iMant+j], bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
                     iMant += codingParams.sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
             # done packing (end loop over scale factor bands)
 
@@ -345,7 +349,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
 
-    input_filename = "Audio/castanets_short.wav"
+    input_filename = "Audio/gspi35_1.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 
@@ -357,8 +361,11 @@ if __name__=="__main__":
     print "\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
     elapsed = time.time()
 
-    encodingTree = pickle.load(open("encodingTree", "r"))
-    encodingMap = pickle.load(open("encodingMap", "r"))
+    buildTable = 0
+
+    if not buildTable:
+        encodingTree = pickle.load(open("encodingTree", "r"))
+        encodingMap = pickle.load(open("encodingMap", "r"))
 
     for Direction in ("Encode", "Decode"):
 #    for Direction in ("Decode"):
@@ -396,12 +403,20 @@ if __name__=="__main__":
             # Initialize bit reservoir
             codingParams.reservoir = 0
             # Huffman encoding map
-            codingParams.encodingMap = encodingMap
+            codingParams.buildTable = buildTable
+
+            if buildTable:
+                codingParams.freqTable = [1e-16 for _ in range(2**16)]
+            else:
+                codingParams.encodingMap = encodingMap
+
+
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
             # Huffman decoding tree
-            codingParams.encodingTree = encodingTree
+            if not buildTable:
+                codingParams.encodingTree = encodingTree
         # only difference is in setting up the output file parameters
 
 
@@ -454,7 +469,18 @@ if __name__=="__main__":
         # close the files
         inFile.Close(codingParams)
         outFile.Close(codingParams)
+
+        if Direction == "Encode" and buildTable:
+            freqTable = codingParams.freqTable
     # end of loop over Encode/Decode
+
+    if buildTable:
+        print "\n\n\tBuilding Huffman Tables..."
+        encodingTree = buildEncodingTree(freqTable)
+        encodingMap = buildEncodingMap(encodingTree)
+
+        pickle.dump(encodingTree, open("encodingTree", "w"), 0)
+        pickle.dump(encodingMap, open("encodingMap", "w"), 0)
 
     elapsed = time.time()-elapsed
     print "\nDone with Encode/Decode test\n"

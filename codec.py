@@ -12,6 +12,7 @@ import numpy as np  # used for arrays
 from window import SineWindow  # current window used for MDCT -- implement KB-derived?
 from mdct import MDCT,IMDCT  # fast MDCT implementation (uses numpy FFT)
 from quantize import *  # using vectorized versions (to use normal versions, uncomment lines 18,67 below defining vMantissa and vDequantize)
+import huffman as huff
 
 # used only by Encode
 from psychoac import CalcSMRs  # calculates SMRs for each scale factor band
@@ -103,6 +104,7 @@ def EncodeSingleChannel(data,codingParams):
     for iBand in range(sfBands.nBands):
         if not bitAlloc[iBand]: nMant-= sfBands.nLines[iBand]  # account for mantissas not being transmitted
     mantissa=np.empty(nMant,dtype=np.int32)
+    huffBits=np.empty(sfBands.nBands)
     iMant=0
     for iBand in range(sfBands.nBands):
         nLines= sfBands.nLines[iBand]
@@ -112,10 +114,19 @@ def EncodeSingleChannel(data,codingParams):
             scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
             scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
             if bitAlloc[iBand]:
-                mantissa[iMant:iMant+nLines] = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+                m = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+                if not codingParams.buildTable:
+                    mHuff = huff.encode(m, codingParams.encodingMap)
+                    totalBits = 0
+                    for code in mHuff:
+                        totalBits += code.bit_length()
+                    huffBits[iBand] = totalBits
+                    # print np.sum(huffBits)
+                    # print np.sum(bitAlloc*sfBands.nLines)
+                    # print "----------------"
+                mantissa[iMant:iMant+nLines] = m
                 iMant += nLines
     # end of loop over scale factor bands
-
     # return results
     return (scaleFactor, bitAlloc, mantissa, overallScale)
 

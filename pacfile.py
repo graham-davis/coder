@@ -105,8 +105,10 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
+from huffman import HuffmanNode
 import sys
 
+import cPickle as pickle
 import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
 
@@ -348,18 +350,20 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/quar48_1.wav"
+    input_filename = "Audio/castanets_short.wav"
     coded_filename = "coded.pac"
-    output_filename = "Output/quar48_1_bitres.wav"
+    output_filename = "Output/output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
         coded_filename = sys.argv[1][:-4] + ".pac"
         output_filename = sys.argv[1][:-4] + "_decoded.wav"
 
-
     print "\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
     elapsed = time.time()
+
+    encodingTree = pickle.load(open("encodingTree", "r"))
+    encodingMap = pickle.load(open("encodingMap", "r"))
 
     for Direction in ("Encode", "Decode"):
 #    for Direction in ("Decode"):
@@ -396,9 +400,13 @@ if __name__=="__main__":
             codingParams.state = 0
             # Initialize bit reservoir
             codingParams.reservoir = 0
+            # Huffman encoding map
+            codingParams.encodingMap = encodingMap
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
+            # Huffman decoding tree
+            codingParams.encodingTree = encodingTree
         # only difference is in setting up the output file parameters
 
 

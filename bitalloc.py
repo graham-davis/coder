@@ -76,10 +76,16 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
     C = np.log(10.0)/(20.0*np.log(2.0))
     # perform first calculation using optimized formula
     bitAllocTemp = bitBudget/(np.sum(nLines)) + C*(SMR-np.mean(SMR))
+    # Zero out bands with no lines
+    bitAllocTemp[np.where(nLines == 0)] = 0
     # locate indexes any non-positive values
     zInd = np.squeeze(np.where(bitAllocTemp<=0.0))
     # locate indexes of positive values
     nzInd = np.squeeze(np.where(bitAllocTemp>0.0))
+
+    # If no positive indexes, allocate no bits
+    if not nzInd.any():
+        return np.zeros(nBands).astype(int)
 
     # counter that will help prevent infinite loop
     # we don't need to loop more than the number of
@@ -112,7 +118,9 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
 
     # if we're under bit budget, we need to add bits
     availBits = np.arange(nBands) # keep track of bands where bits can be added
+    availBits = np.delete(availBits, np.where(nLines == 0)) # Remove bands w/ no lines
     bitAllocTemp = np.copy(bitAlloc) # take a copy of bitAlloc
+
     while np.sum(bitAllocTemp*nLines) < bitBudget  and availBits.size > 0:
         NMRs = 6*bitAllocTemp[availBits]-SMR[availBits]
         # find the smallest one

@@ -42,8 +42,6 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
         
     N = codingParams.a + codingParams.b
     halfN = N/2
-    #halfN = codingParams.nMDCTLines
-    #N = 2*halfN
     # vectorizing the Dequantize function call
 #    vDequantize = np.vectorize(Dequantize)
 
@@ -59,7 +57,6 @@ def Decode(scaleFactor,bitAlloc,mantissa,overallScaleFactor,codingParams):
 
 
     # IMDCT and window the data for this channel
-    #data = SineWindow( IMDCT(mdctLine, halfN, halfN) )  # takes in halfN MDCT coeffs
     if codingParams.state == 0 or codingParams.state == 2:
         data = SineWindow( IMDCT(mdctLine, halfN, halfN) )
     else:
@@ -83,7 +80,6 @@ def Encode(data,codingParams):
         bitAlloc.append(b)
         mantissa.append(m)
         overallScaleFactor.append(o)
-
     # return results bundled over channels
     return (scaleFactor,bitAlloc,mantissa,overallScaleFactor)
 
@@ -92,8 +88,6 @@ def EncodeSingleChannel(data,codingParams):
     """Encodes a single-channel block of signed-fraction data based on the parameters in a PACFile object"""
 
     # prepare various constants
-    #halfN = codingParams.nMDCTLines
-    #N = 2*halfN
     N = codingParams.a + codingParams.b
     halfN = N/2
     nScaleBits = codingParams.nScaleBits

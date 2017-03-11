@@ -391,7 +391,9 @@ class PACFile(AudioFile):
             # end loop over channels, done writing coded data for all channels
             
             # after 1 subblock of status 1, change to status 2
-            if codingParams.state == 1: codingParams.state = 2
+            if codingParams.state == 1:
+                codingParams.state = 2
+                codingParams.prevState = 1
 
         # end loop over subblocks, done writing coded data for all subblocks
         
@@ -443,7 +445,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Castanets _original_.wav"
+    input_filename = "harp40_1.wav"
     coded_filename = "coded.pac"
     output_filename = "output.wav"
 
@@ -493,6 +495,7 @@ if __name__=="__main__":
             #   2 - short block
             #   3 - stop transition
             codingParams.state = 0
+            codingParams.prevState = 0
             # Initialize bit reservoir
             codingParams.reservoir = 0
         else: # "Decode"
@@ -507,40 +510,55 @@ if __name__=="__main__":
         previousBlock = []                                  # Initialize previous block
         firstBlock = True                                   # Set first block
         #secondBlock = False
+        
+        # read in the current block
+        currentBlock=inFile.ReadDataBlock(codingParams)
 
         while True:
-            # Read next data block
-            currentBlock=inFile.ReadDataBlock(codingParams)
+            # Read next (future) data block
+            nextBlock=inFile.ReadDataBlock(codingParams)
             if not currentBlock: break  # we hit the end of the input file
 
             # don't write the first PCM block (it corresponds to the half-block delay introduced by the MDCT)
             if firstBlock and Direction == "Decode":
                 firstBlock = False
+                currentBlock = nextBlock
                 continue 
            
             # Only handle state transitions if we are encoding
-            if Direction == "Encode":
+            if Direction == "Encode" and nextBlock:
+                #print currentBlock[0].shape,nextBlock[0].shape
                 # Check for transient in currentBlock for any channel
-                if not previousBlock == []:
+                if True: #not previousBlock == []:
                     isTrans = False
                     for iCh in range(codingParams.nChannels):
-                        if IsTransient(previousBlock[iCh], currentBlock[iCh]):
+                        if IsTransient(currentBlock[iCh], nextBlock[iCh]):
                             isTrans = True
 
                     if isTrans:
+                        #print "isTrans",
                         # Start transition window
                         if codingParams.state == 0 or codingParams.state == 3:
+                            codingParams.prevState = codingParams.state
                             codingParams.state = 1
                         # Continue short block
                         else:
+                            codingParams.prevState = codingParams.state
                             codingParams.state = 2
                     # No transient in current block
                     else:
+                        #print "not Trans",
                         # Begin end transition if current state is short block
-                        if codingParams.state == 1 or codingParams.state == 2:
+                        if codingParams.state == 1 or (codingParams.state == 2 and not codingParams.prevState == 1):
+                            codingParams.prevState = codingParams.state
                             codingParams.state = 3
+                        # test to see if additional block of short blocks needed after transient
+                        elif codingParams.prevState == 1 and codingParams.state == 2:
+                            codingParams.prevState = codingParams.state
+                            codingParams.state = 2
                         # Stay at long window
                         else: 
+                            codingParams.prevState = codingParams.state
                             codingParams.state = 0
 
                 #if codingParams.state == 1 or codingParams.state == 2:
@@ -548,11 +566,22 @@ if __name__=="__main__":
                 #        plt.plot(np.concatenate((previousBlock[iCh],currentBlock[iCh])))
                 #    plt.show()
 
-                # Update previousBlock
-                previousBlock = currentBlock
-            
-            outFile.WriteDataBlock(currentBlock,codingParams)
-            sys.stdout.write(".")  # just to signal how far we've gotten to user
+            # Update previousBlock, currentBlock
+            previousBlock = currentBlock
+            currentBlock = nextBlock
+
+            #print "start state: ",codingParams.state,
+            if codingParams.state == 0:
+                sys.stdout.write("_ ")  # just to signal how far we've gotten to user
+            elif codingParams.state == 1:
+                sys.stdout.write("/ ")
+            elif codingParams.state == 2:
+                sys.stdout.write("^ ")
+            else:
+                sys.stdout.write("\\ ")
+            outFile.WriteDataBlock(previousBlock,codingParams)
+            #print "end state: ",codingParams.state
+
             #if Direction == "Encode":
             #    print codingParams.state[0],codingParams.state[1] 
             sys.stdout.flush()

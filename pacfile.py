@@ -213,7 +213,7 @@ class PACFile(AudioFile):
                             huffBits[i+1] = bits
                             nHuffBits = nHuffBits - 16
                         if huffBits.any():
-                            decoded = decode(huffBits, codingParams.encodingTree)
+                            decoded = decode(huffBits, codingParams.encodingTrees[hTable - 1])
                             mantissa[codingParams.sfBands.lowerLine[iBand]:(codingParams.sfBands.upperLine[iBand]+1)] = decoded
             # done unpacking data (end loop over scale factor bands)
 
@@ -291,8 +291,8 @@ class PACFile(AudioFile):
                     # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
                     if hTables[iCh] == 0:
                         nBytes += bitAlloc[iCh][iBand]*codingParams.sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
-                    else:
-                        nBytes += hBits[iCh][iBand]  # Add huffman coded bit allocation to nBytes
+            if hTables[iCh] is not 0:
+                nBytes += hBits[iCh]  # Add huffman coded bit allocation to nBytes
             # end computing bits needed for this channel's data
 
             # CUSTOM DATA:
@@ -384,7 +384,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
 
-    input_filename = "Audio/castanets.wav"
+    input_filename = "Audio/spmg54_1.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 
@@ -393,15 +393,24 @@ if __name__=="__main__":
         coded_filename = sys.argv[1][:-4] + ".pac"
         output_filename = sys.argv[1][:-4] + "_decoded.wav"
 
-    buildTable = 0
+    buildTable = 0  # flag to build new huffman table or not
+    nTables = 5     # how many huffman tables to load
 
-    if not buildTable:
-        print "\n\tLoading Huffman Tables"
-        encodingTree = pickle.load(open("encodingTree", "r"))
-        encodingMap = pickle.load(open("encodingMap", "r"))
+    encodingTrees = []
+    encodingMaps = []
+    print "\n\tLoading Huffman Tables ...",
 
+    for i in range(1, nTables+1):
+        sys.stdout.write(".")  # just to signal how far we've gotten to user
+        sys.stdout.flush()
+        treePath = './Trees/encodingTree%d' % i
+        encodingTrees.append(pickle.load(open(treePath, 'r')))
+        sys.stdout.write(".")  # just to signal how far we've gotten to user
+        sys.stdout.flush()
+        mapPath = './Maps/encodingMap%d' % i
+        encodingMaps.append(pickle.load(open(mapPath, 'r')))
 
-    print "\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
+    print "\n\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
     elapsed = time.time()
 
     for Direction in ("Encode", "Decode"):
@@ -445,16 +454,15 @@ if __name__=="__main__":
 
             if buildTable:
                 codingParams.freqTable = [1e-16 for _ in range(2**16)]
-            else:
-                codingParams.encodingMap = encodingMap
+    
+            codingParams.encodingMaps = encodingMaps
 
 
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
             # Huffman decoding tree
-            if not buildTable:
-                codingParams.encodingTree = encodingTree
+            codingParams.encodingTrees = encodingTrees
         # only difference is in setting up the output file parameters
 
 
@@ -517,8 +525,8 @@ if __name__=="__main__":
         encodingTree = buildEncodingTree(freqTable)
         encodingMap = buildEncodingMap(encodingTree)
 
-        pickle.dump(encodingTree, open("encodingTree", "w"), 0)
-        pickle.dump(encodingMap, open("encodingMap", "w"), 0)
+        pickle.dump(encodingTree, open("./Trees/encodingTree5", "w"), 0)
+        pickle.dump(encodingMap, open("./Maps/encodingMap5", "w"), 0)
 
     elapsed = time.time()-elapsed
     print "\nDone with Encode/Decode test\n"

@@ -105,8 +105,12 @@ def EncodeSingleChannel(data,codingParams):
     for iBand in range(sfBands.nBands):
         if not bitAlloc[iBand]: nMant-= sfBands.nLines[iBand]  # account for mantissas not being transmitted
     mantissa=np.empty(nMant,dtype=np.int32)
+    nHuffMaps = len(codingParams.encodingMaps)
     mHuff=[]
-    huffBits=np.empty(sfBands.nBands)
+    huffBits=[]
+    for h in range(nHuffMaps):
+        mHuff.append([])
+        huffBits.append(0)
     iMant=0
     for iBand in range(sfBands.nBands):
         nLines= sfBands.nLines[iBand]
@@ -118,24 +122,38 @@ def EncodeSingleChannel(data,codingParams):
             # store FP coded mantissa
             m = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
             mantissa[iMant:iMant+nLines] = m
-            # store Huffman coded mantissa
-            huffCode = huff.encode(m, codingParams.encodingMap)
-            mHuff.append(huffCode)
-            huffBits[iBand] = 16 + huffCode[0]
+
+            for h in range(nHuffMaps):
+                # store Huffman coded mantissa
+                huffCode = huff.encode(m, codingParams.encodingMaps[h])
+                mHuff[h].append(huffCode)
+                huffBits[h] += 16 + huffCode[0]
             # increment starting index
             iMant += nLines
         else:
-            mHuff.append([0])
-    # return huffman coded mantissas if bits used is less
-    if np.sum(huffBits) < np.sum(np.multiply(bitAlloc,sfBands.nLines)):
-        # codingParams.reservoir = bitBudget - np.sum(huffBits) BIT RESERVOIR NOT WORKING....
-        return (scaleFactor, bitAlloc, mHuff, overallScale, 1, huffBits)
+            for h in range(nHuffMaps):
+                mHuff[h].append([])
+
+    # If building freq table, at mantissas to freq table
+    if codingParams.buildTable:
+        codingParams.freqTable = huff.buildFrequencyTable(codingParams.freqTable, mantissa)
+
+    # Initialize optimal bits as non-huffman
+    optimalBits = np.sum(np.multiply(bitAlloc,sfBands.nLines))
+    huffTable = 0
+
+    # check for optimal bit allocation
+    for h in range(nHuffMaps):
+        if huffBits[h] < optimalBits:
+            huffTable = h + 1
+            optimalBits = huffBits[h]
+            mantissa = mHuff[h]
 
     # calculate rollover bits for bit reservoir
-    codingParams.reservoir = bitBudget - np.sum(np.multiply(bitAlloc, sfBands.nLines))
+    codingParams.reservoir = np.min([bitBudget/2., bitBudget - optimalBits])
 
     # else return normal fp mantissas
-    return (scaleFactor, bitAlloc, mantissa, overallScale, 0, [])
+    return (scaleFactor, bitAlloc, mantissa, overallScale, huffTable, optimalBits)
 
 
 

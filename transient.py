@@ -32,5 +32,64 @@ def IsTransient(previousBlock, currentBlock):
 
 #Testing code
 if __name__ == "__main__":
-    pass
+    from pcmfile import * # to get access to WAV file handling
+
+    input_filename = "Audio/harp40_1.wav"
+
+    inFile= PCMFile(input_filename)
+    codingParams=inFile.OpenForReading()  # (includes reading header)
+    codingParams.nMDCTLines = 1024
+    codingParams.nScaleBits = 4
+    codingParams.nMantSizeBits = 4
+    codingParams.targetBitsPerSample = 2.9
+    # tell the PCM file how large the block size is
+    codingParams.nSamplesPerBlock = codingParams.nMDCTLines
+    # Set block state
+    #   0 - long block
+    #   1 - short block
+    #   2 - start transition block
+    #   3 - end transition block
+    codingParams.state = 0
+
+    # Read the input file and pass its data to the output file to be written
+    firstBlock = True                                   # Set first block
+    previousBlock = []
+
+    sample = 0
+    transients = []
+    signal = []
+
+    while True:
+
+         # Read next data block
+        currentBlock=inFile.ReadDataBlock(codingParams)
+        if not currentBlock: break  # we hit the end of the input file
+
+        signal.extend(currentBlock[0][:])
+
+        if previousBlock:
+            if IsTransient(previousBlock[0], currentBlock[0]):
+                transients.append(sample)
+
+        # Update currentBlock
+        previousBlock = currentBlock
+        sample += codingParams.nMDCTLines
+        print sample
+        print "----------------------------------"
+
+
+    # end loop over reading/writing the blocks
+    # close the files
+    inFile.Close(codingParams)
+
+    fig = figure(1)
+    p = fig.add_subplot(1,1,1)
+    p.plot(np.arange(0, len(signal)), signal)
+    for n in range(len(transients)):
+        p.plot((transients[n], transients[n]), (-1, 1), 'r-')
+
+    for x in range(len(signal)/1024):
+        p.plot((1024*x, 1024*x), (-1, 1), 'k--')
+
+    show()
     

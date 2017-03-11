@@ -56,13 +56,14 @@ def Encode(data,codingParams):
 
     # loop over channels and separately encode each one
     for iCh in range(codingParams.nChannels):
-        (s,b,m,o) = EncodeSingleChannel(data[iCh],codingParams)
+        (s,b,m,o,h) = EncodeSingleChannel(data[iCh],codingParams)
         scaleFactor.append(s)
         bitAlloc.append(b)
         mantissa.append(m)
         overallScaleFactor.append(o)
+        huffBits.append(h)
     # return results bundled over channels
-    return (scaleFactor,bitAlloc,mantissa,overallScaleFactor)
+    return (scaleFactor,bitAlloc,mantissa,overallScaleFactor,huffBits)
 
 
 def EncodeSingleChannel(data,codingParams):
@@ -115,20 +116,22 @@ def EncodeSingleChannel(data,codingParams):
             scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
             if bitAlloc[iBand]:
                 m = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
-                if not codingParams.buildTable:
-                    mHuff = huff.encode(m, codingParams.encodingMap)
-                    totalBits = 0
-                    for code in mHuff:
-                        totalBits += code.bit_length()
-                    huffBits[iBand] = totalBits
-                    # print np.sum(huffBits)
-                    # print np.sum(bitAlloc*sfBands.nLines)
-                    # print "----------------"
-                mantissa[iMant:iMant+nLines] = m
+                mHuff = huff.encode(m, codingParams.encodingMap)
+                print mHuff
+                totalBits = 0
+                for code in mHuff:
+                    totalBits += code.bit_length()
+                huffBits[iBand] = totalBits
+
+                mantissa[iMant:iMant+nLines] = mHuff
                 iMant += nLines
     # end of loop over scale factor bands
     # return results
-    return (scaleFactor, bitAlloc, mantissa, overallScale)
+    # if not codingParams.buildTable:
+    #     print np.sum(huffBits)
+    #     print np.sum(bitAlloc*sfBands.nLines)
+    #     print "----------------"
+    return (scaleFactor, bitAlloc, mantissa, overallScale, huffBits)
 
 
 

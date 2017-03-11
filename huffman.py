@@ -96,29 +96,29 @@ if __name__ == "__main__":
                   [3, 4, 5, 6, 6, 6, 6, 6, -7, 7, 8, 8, 8, 8, 8, 8, 10]])
 
     # Create/Update Table
-    nBands = 2
-    freqTable = [1e-16 for _ in range(2**16)]
-    for i in range(0, nBands):
-        freqTable = buildFrequencyTable(freqTable, x[i])
+    # nBands = 2
+    # freqTable = [1e-16 for _ in range(2**16)]
+    # for i in range(0, nBands):
+    #     freqTable = buildFrequencyTable(freqTable, x[i])
 
-    encodingTree = buildEncodingTree(freqTable)
-    encodingMap = buildEncodingMap(encodingTree)
+    # encodingTree = buildEncodingTree(freqTable)
+    # encodingMap = buildEncodingMap(encodingTree)
 
-    pickle.dump(encodingTree, open("encodingTree", "w"), 0)
-    pickle.dump(encodingMap, open("encodingMap", "w"), 0)
+    # pickle.dump(encodingTree, open("encodingTreeTest", "w"), 0)
+    # pickle.dump(encodingMap, open("encodingMapTest", "w"), 0)
 
     # Load table
-    encodingTree = pickle.load(open("encodingTree", "r"))
-    encodingMap = pickle.load(open("encodingMap", "r"))
+    encodingTree = pickle.load(open("encodingTreeTest", "r"))
+    encodingMap = pickle.load(open("encodingMapTest", "r"))
 
 
     # print list(encodingMap.items())
     # print [encodingMap[i] for i in x[1]]
 
     # Encode
-    temp = encode(x[1], encodingMap)
+    temp = encode([1, 2, 3, 0, 0, 3, 2], encodingMap)
     print ['{0:016b}'.format(i) for i in temp]
-
+    print temp
     # Decode
     print decode(temp, encodingTree)
 

@@ -53,17 +53,20 @@ def Encode(data,codingParams):
     bitAlloc = []
     mantissa = []
     overallScaleFactor = []
+    hTables = []
+    hBits = []
 
     # loop over channels and separately encode each one
     for iCh in range(codingParams.nChannels):
-        (s,b,m,o,h) = EncodeSingleChannel(data[iCh],codingParams)
+        (s,b,m,o,t,h) = EncodeSingleChannel(data[iCh],codingParams)
         scaleFactor.append(s)
         bitAlloc.append(b)
         mantissa.append(m)
         overallScaleFactor.append(o)
-        huffBits.append(h)
+        hTables.append(t)
+        hBits.append(h)
     # return results bundled over channels
-    return (scaleFactor,bitAlloc,mantissa,overallScaleFactor,huffBits)
+    return (scaleFactor,bitAlloc,mantissa,overallScaleFactor,hTables,hBits)
 
 
 def EncodeSingleChannel(data,codingParams):
@@ -80,24 +83,21 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
+    bitBudget -= codingParams.nHuffTableBits    # less huff table bit allocation
     bitBudget += codingParams.reservoir # add reservoir bits to bit budget
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
     mdctTimeSamples = SineWindow(data)
     mdctLines = MDCT(mdctTimeSamples, halfN, halfN)[:halfN]
-
     # compute overall scale factor for this block and boost mdctLines using it
     maxLine = np.max( np.abs(mdctLines) )
     overallScale = ScaleFactor(maxLine,nScaleBits)  #leading zeroes don't depend on nMantBits
     mdctLines *= (1<<overallScale)
-
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
     # perform bit allocation using SMR results
     bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
-    # calculate rollover bits for bit reservoir
-    codingParams.reservoir = bitBudget - np.sum(np.multiply(bitAlloc, sfBands.nLines))
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
@@ -105,33 +105,38 @@ def EncodeSingleChannel(data,codingParams):
     for iBand in range(sfBands.nBands):
         if not bitAlloc[iBand]: nMant-= sfBands.nLines[iBand]  # account for mantissas not being transmitted
     mantissa=np.empty(nMant,dtype=np.int32)
+    mHuff=[]
     huffBits=np.empty(sfBands.nBands)
     iMant=0
     for iBand in range(sfBands.nBands):
         nLines= sfBands.nLines[iBand]
-        if nLines:      # Only encode mantissas if lines exist in current band
+        if nLines and bitAlloc[iBand]:      # Only encode mantissas if lines exist in current band
             lowLine = sfBands.lowerLine[iBand]
             highLine = sfBands.upperLine[iBand] + 1  # extra value is because slices don't include last value
             scaleLine = np.max(np.abs( mdctLines[lowLine:highLine] ) )
             scaleFactor[iBand] = ScaleFactor(scaleLine, nScaleBits, bitAlloc[iBand])
-            if bitAlloc[iBand]:
-                m = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
-                mHuff = huff.encode(m, codingParams.encodingMap)
-                print mHuff
-                totalBits = 0
-                for code in mHuff:
-                    totalBits += code.bit_length()
-                huffBits[iBand] = totalBits
+            # store FP coded mantissa
+            m = vMantissa(mdctLines[lowLine:highLine],scaleFactor[iBand], nScaleBits, bitAlloc[iBand])
+            mantissa[iMant:iMant+nLines] = m
+            # store Huffman coded mantissa
+            huffCode = huff.encode(m, codingParams.encodingMap)
+            mHuff.append(huffCode)
+            huffBits[iBand] = 16 + huffCode[0]
+            # increment starting index
+            iMant += nLines
+        else:
+            mHuff.append([0])
+    # return huffman coded mantissas if bits used is less
+    if np.sum(huffBits) < np.sum(np.multiply(bitAlloc,sfBands.nLines)):
+        # codingParams.reservoir = bitBudget - np.sum(huffBits) BIT RESERVOIR NOT WORKING....
+        return (scaleFactor, bitAlloc, mHuff, overallScale, 1, huffBits)
 
-                mantissa[iMant:iMant+nLines] = mHuff
-                iMant += nLines
-    # end of loop over scale factor bands
-    # return results
-    # if not codingParams.buildTable:
-    #     print np.sum(huffBits)
-    #     print np.sum(bitAlloc*sfBands.nLines)
-    #     print "----------------"
-    return (scaleFactor, bitAlloc, mantissa, overallScale, huffBits)
+    # calculate rollover bits for bit reservoir
+    codingParams.reservoir = bitBudget - np.sum(np.multiply(bitAlloc, sfBands.nLines))
+
+    # else return normal fp mantissas
+    return (scaleFactor, bitAlloc, mantissa, overallScale, 0, [])
+
 
 
 

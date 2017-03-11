@@ -116,11 +116,11 @@ if __name__ == "__main__":
     # print [encodingMap[i] for i in x[1]]
 
     # Encode
-    temp = encode([1, 2, 3, 0, 0, 3, 2], encodingMap)
-    print ['{0:016b}'.format(i) for i in temp]
+    temp = encode([0,0,0,0,0], encodingMap)
     print temp
+    print ['{0:016b}'.format(i) for i in temp]
     # Decode
-    print decode(temp, encodingTree)
+    print decode([10, 43648], encodingTree)
 
 
 

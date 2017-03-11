@@ -384,7 +384,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
 
-    input_filename = "Audio/spmg54_1.wav"
+    input_filename = "Audio/harp40_1.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 
@@ -394,7 +394,7 @@ if __name__=="__main__":
         output_filename = sys.argv[1][:-4] + "_decoded.wav"
 
     buildTable = 0  # flag to build new huffman table or not
-    nTables = 5     # how many huffman tables to load
+    nTables = 6     # how many huffman tables to load
 
     encodingTrees = []
     encodingMaps = []
@@ -525,8 +525,8 @@ if __name__=="__main__":
         encodingTree = buildEncodingTree(freqTable)
         encodingMap = buildEncodingMap(encodingTree)
 
-        pickle.dump(encodingTree, open("./Trees/encodingTree5", "w"), 0)
-        pickle.dump(encodingMap, open("./Maps/encodingMap5", "w"), 0)
+        pickle.dump(encodingTree, open("./Trees/encodingTree6", "w"), 0)
+        pickle.dump(encodingMap, open("./Maps/encodingMap6", "w"), 0)
 
     elapsed = time.time()-elapsed
     print "\nDone with Encode/Decode test\n"

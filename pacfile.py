@@ -384,7 +384,7 @@ if __name__=="__main__":
     from pcmfile import * # to get access to WAV file handling
 
 
-    input_filename = "Audio/spmg54_1.wav"
+    input_filename = "Audio/harp40_1.wav"
     coded_filename = "coded.pac"
     output_filename = "Output/output.wav"
 

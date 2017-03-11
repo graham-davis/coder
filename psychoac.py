@@ -33,7 +33,6 @@ def Intensity(spl):
 
 def Thresh(f):
     """Returns the threshold in quiet measured in SPL at frequency f (in Hz)"""
-
     # if f is a single number less than 10, replace with 10
     if isinstance(f,(int,float)) and f < 10.0:
         f = 10.0
@@ -148,12 +147,21 @@ class ScaleFactorBands:
         self.nLines = np.array(nLines)
         # number of bands is the size of nLines
         self.nBands = len(nLines)
-        # lower line is the cummulative sum of the values in nLines minus the values
-        # in nLines
-        self.lowerLine = np.cumsum(nLines)-nLines
-        # upper line is the cummulative sum of the values in nLines minus 1
-        self.upperLine = np.maximum(0,np.cumsum(nLines)-1)
-
+        
+        # initialize lowerLine and upperLine
+        self.lowerLine = np.zeros(25,np.int32)
+        self.upperLine = np.zeros(25,np.int32)
+        # current line variable
+        startInd = 0
+        # loop through and compute line indexes
+        for i in range(self.nBands):
+            if self.nLines[i] == 0:
+                self.lowerLine[i] = -1
+                self.upperLine[i] = -1
+            else:
+                self.lowerLine[i] = startInd
+                self.upperLine[i] = startInd + self.nLines[i]-1
+                startInd = self.upperLine[i]+1
 
 def getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands):
     """
@@ -226,8 +234,12 @@ def getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands):
             cbNoiseSpl[i] = SPL(0.00001)
         else:
             cbNoiseSpl[i] = SPL(np.sum(XiNoise[sfBands.lowerLine[i]:sfBands.upperLine[i]+1]))
-        # compute freq from geometric mean
-        cbNoiseFreq[i] = st.gmean(f[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
+
+        if sfBands.nLines[i]: 
+            # compute freq from geometric mean
+            cbNoiseFreq[i] = st.gmean(f[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
+        else:
+            cbNoiseFreq[i] = 0
         # put zero back afterwards
         if i == 0:
             f[0] = 0
@@ -306,13 +318,17 @@ def CalcSMRs(data, MDCTdata, MDCTscale, sampleRate, sfBands):
 
     # calculate the masking threshold
     threshold = getMaskedThreshold(data, MDCTdata, MDCTscale, sampleRate, sfBands)
-    
+   
     # array to hold SMR values
     SMRs = np.zeros(len(sfBands.nLines))
     # compute the SMR values
     for i in range(len(sfBands.nLines)):
-        SMRs[i] = np.max(MDCTdataSpl[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])-\
-                         np.min(threshold[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
+        # Only calculate SMR if there are lines in this band
+        if sfBands.nLines[i]:
+            SMRs[i] = np.max(MDCTdataSpl[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])-\
+                             np.min(threshold[sfBands.lowerLine[i]:sfBands.upperLine[i]+1])
+        else:
+            SMRs[i] = 0
 
     # return the calculate SMR values
     return SMRs # TO REPLACE WITH YOUR CODE

@@ -101,9 +101,12 @@ Description of the PAC File Format:
             as bits packed into an array of nBytes bytes:
                 blockType[iCh]                          2 bits (0=long,1=start,2=short,3=stop)
                 overallScale[iCh]                       nScaleBits bits
+                hTable                                  nHuffTableBits bits
                 for iBand in range(nSFBands):
                     scaleFactor[iCh][iBand]             nScaleBits bits
                     bitAlloc[iCh][iBand]                nMantSizeBits bits
+                    if hTable != 0 
+                        huffman coding length           nHuffLengthBits bits
                     if bitAlloc[iCh][iBand] (and nLines_blockType_[iBand]):
                         for m in nLines_blockType_[iBand]:
                             mantissa[iCh][iBand][m]     bitAlloc[iCh][iBand]+1 bits
@@ -360,7 +363,7 @@ class PACFile(AudioFile):
             for iCh in range(codingParams.nChannels):
                 # determine the size of this channel's data block and write it to the output file
 
-                nBytes = 2+ codingParams.nScaleBits  # bits for overall scale factor
+                nBytes = 2 + codingParams.nScaleBits  # bits for overall scale factor
                 for iBand in range(sfBands.nBands): # loop over each scale factor band to get its bits
                     nBytes += codingParams.nScaleBits + codingParams.nHuffTableBits + codingParams.nMantSizeBits # huff table code allocation
                     # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
@@ -465,9 +468,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/castanets.wav"
+    input_filename = "Audio/gspi35_1.wav"
     coded_filename = "coded.pac"
-    output_filename = "Output/full_castanets.wav"
+    output_filename = "Output/full_german.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -559,7 +562,6 @@ if __name__=="__main__":
         # Read the input file and pass its data to the output file to be written
         previousBlock = []                                  # Initialize previous block
         firstBlock = True                                   # Set first block
-        #secondBlock = False
         
         # read in the current block
         currentBlock=inFile.ReadDataBlock(codingParams)
@@ -577,7 +579,6 @@ if __name__=="__main__":
            
             # Only handle state transitions if we are encoding
             if Direction == "Encode" and nextBlock:
-                #print currentBlock[0].shape,nextBlock[0].shape
                 # Check for transient in currentBlock for any channel
                 if True: #not previousBlock == []:
                     isTrans = False
@@ -615,7 +616,6 @@ if __name__=="__main__":
             previousBlock = currentBlock
             currentBlock = nextBlock
 
-            #print "start state: ",codingParams.state,
             if codingParams.state == 0:
                 sys.stdout.write("_ ")  # just to signal how far we've gotten to user
             elif codingParams.state == 1:
@@ -625,10 +625,7 @@ if __name__=="__main__":
             else:
                 sys.stdout.write("\\ ")
             outFile.WriteDataBlock(previousBlock,codingParams)
-            #print "end state: ",codingParams.state
 
-            #if Direction == "Encode":
-            #    print codingParams.state[0],codingParams.state[1] 
             sys.stdout.flush()
 
         # end loop over reading/writing the blocks

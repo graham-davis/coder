@@ -146,13 +146,8 @@ class PACFile(AudioFile):
         # use struct.unpack() to load up all the header data
         (sampleRate, nChannels, numSamples, nMDCTLinesLong, nMDCTLinesShort, nScaleBits, nMantSizeBits) \
                  = unpack('<LHLLLHH',self.fp.read(calcsize('<LHLLLHH')))
-        nBands = unpack('<L',self.fp.read(calcsize('<L')))[0]
-        nLinesLong =  unpack('<'+str(nBands)+'H',self.fp.read(calcsize('<'+str(nBands)+'H')))
-        nLinesShort = unpack('<'+str(nBands)+'H',self.fp.read(calcsize('<'+str(nBands)+'H')))
-        nLinesTrans = unpack('<'+str(nBands)+'H',self.fp.read(calcsize('<'+str(nBands)+'H')))
-        sfBandsLong=ScaleFactorBands(nLinesLong)
-        sfBandsShort=ScaleFactorBands(nLinesShort)
-        sfBandsTrans=ScaleFactorBands(nLinesTrans)
+
+
         # load up a CodingParams object with the header data
         myParams=CodingParams()
         myParams.sampleRate = sampleRate
@@ -164,9 +159,14 @@ class PACFile(AudioFile):
         myParams.nScaleBits = nScaleBits
         myParams.nMantSizeBits = nMantSizeBits
         # add in scale factor band information
-        myParams.sfBandsLong = sfBandsLong
-        myParams.sfBandsShort = sfBandsShort
-        myParams.sfBandsTrans = sfBandsTrans
+
+        sfBandsLong=ScaleFactorBands( AssignMDCTLinesFromFreqLimits(nMDCTLinesLong, sampleRate))
+        sfBandsShort=ScaleFactorBands( AssignMDCTLinesFromFreqLimits(nMDCTLinesShort,sampleRate))
+        sfBandsTrans=ScaleFactorBands( AssignMDCTLinesFromFreqLimits(myParams.nMDCTLinesTrans,myParams.sampleRate))
+        myParams.sfBandsLong =sfBandsLong
+        myParams.sfBandsShort=sfBandsShort
+        myParams.sfBandsTrans=sfBandsTrans
+
         # start w/o all zeroes as data from prior block to overlap-and-add for output
         overlapAndAdd = []
         for iCh in range(nChannels): overlapAndAdd.append( np.zeros(nMDCTLinesLong, dtype=np.float64) )
@@ -304,10 +304,6 @@ class PACFile(AudioFile):
         codingParams.sfBandsLong =sfBandsLong
         codingParams.sfBandsShort=sfBandsShort
         codingParams.sfBandsTrans=sfBandsTrans
-        self.fp.write(pack('<L',sfBandsLong.nBands))
-        self.fp.write(pack('<'+str(sfBandsLong.nBands)+'H',*(sfBandsLong.nLines.tolist()) ))
-        self.fp.write(pack('<'+str(sfBandsShort.nBands)+'H',*(sfBandsShort.nLines.tolist()) ))
-        self.fp.write(pack('<'+str(sfBandsTrans.nBands)+'H',*(sfBandsTrans.nLines.tolist()) ))
 
         # start w/o all zeroes as prior block of unencoded data for other half of MDCT block
         priorBlock = []
@@ -468,9 +464,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/gspi35_1.wav"
+    input_filename = "Audio/castanets.wav"
     coded_filename = "coded.pac"
-    output_filename = "Output/full_german.wav"
+    output_filename = "Output/output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]

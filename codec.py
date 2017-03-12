@@ -111,8 +111,8 @@ def EncodeSingleChannel(data,codingParams):
     # compute target mantissa bit budget for this block of halfN MDCT mantissas
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
-    bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
-    bitBudget -= codingParams.nHuffTableBits    # less huff table bit allocation
+    bitBudget -= (codingParams.nHuffTableBits+ codingParams.nMantSizeBits)*sfBands.nBands  # less mantissa bit allocation bits
+    bitBudget -= 34         # Block type + nBytes bits
     bitBudget += codingParams.reservoir # add reservoir bits to bit budget
 
     # window data for side chain FFT and also window and compute MDCT

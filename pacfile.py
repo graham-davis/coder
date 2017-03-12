@@ -101,9 +101,12 @@ Description of the PAC File Format:
             as bits packed into an array of nBytes bytes:
                 blockType[iCh]                          2 bits (0=long,1=start,2=short,3=stop)
                 overallScale[iCh]                       nScaleBits bits
+                hTable                                  nHuffTableBits bits
                 for iBand in range(nSFBands):
                     scaleFactor[iCh][iBand]             nScaleBits bits
                     bitAlloc[iCh][iBand]                nMantSizeBits bits
+                    if hTable != 0 
+                        huffman coding length           nHuffLengthBits bits
                     if bitAlloc[iCh][iBand] (and nLines_blockType_[iBand]):
                         for m in nLines_blockType_[iBand]:
                             mantissa[iCh][iBand][m]     bitAlloc[iCh][iBand]+1 bits
@@ -115,9 +118,11 @@ from audiofile import * # base class
 from bitpack import *  # class for packing data into an array of bytes where each item's number of bits is specified
 import codec    # module where the actual PAC coding functions reside(this module only specifies the PAC file format)
 from psychoac import ScaleFactorBands, AssignMDCTLinesFromFreqLimits  # defines the grouping of MDCT lines into scale factor bands
+from huffman import HuffmanNode, buildFrequencyTable, buildEncodingTree, buildEncodingMap, decode
 from transient import IsTransient
 import sys
 
+import cPickle as pickle
 import matplotlib.pyplot as plt
 import numpy as np  # to allow conversion of data blocks to numpy's array object
 MAX16BITS = 32767
@@ -198,8 +203,10 @@ class PACFile(AudioFile):
             # extract the data from the PackedBits object
             codingParams.state = pb.ReadBits(2) # read in blockType
             overallScaleFactor = pb.ReadBits(codingParams.nScaleBits)  # overall scale factor
+            hTable = pb.ReadBits(codingParams.nHuffTableBits)   # huffman table code
             scaleFactor=[]
             bitAlloc=[]
+
             if codingParams.state == 0:
                 mantissa=np.zeros(codingParams.nMDCTLinesLong,np.int32)  # start w/ all mantissas zero
             elif codingParams.state == 1 or codingParams.state == 3:
@@ -213,7 +220,6 @@ class PACFile(AudioFile):
                 bitAlloc.append(ba)  # bit allocation for this band
                 scaleFactor.append(pb.ReadBits(codingParams.nScaleBits))  # scale factor for this band
                 if bitAlloc[iBand]:
-                    # if bits allocated, extract those mantissas and put in correct location in matnissa array
                     if codingParams.state == 0:
                         nMDCTLines = codingParams.nMDCTLinesLong
                         nLines = codingParams.sfBandsLong.nLines[iBand]
@@ -229,14 +235,31 @@ class PACFile(AudioFile):
                         nLines = codingParams.sfBandsShort.nLines[iBand]
                         lowerLine = codingParams.sfBandsShort.lowerLine[iBand]
                         upperLine = codingParams.sfBandsShort.upperLine[iBand]
-                    m=np.empty(nLines,np.int32)
-                    for j in range(nLines):
-                        m[j]=pb.ReadBits(bitAlloc[iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so encoded as 1 lower than actual allocation
-                    mantissa[lowerLine:upperLine+1] = m
+
+                    
+                    # read non huffman encoded mantissas
+                    if hTable == 0:
+                        m=np.empty(nLines,np.int32)
+                        for j in range(nLines):
+                            m[j]=pb.ReadBits(bitAlloc[iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so encoded as 1 lower than actual allocation
+                        mantissa[lowerLine:upperLine+1] = m
+                    # read huffman mantissas
+                    else:
+                        nHuffBits = pb.ReadBits(codingParams.nHuffLengthBits)
+                        nChunks = int(np.ceil(nHuffBits/16.))
+                        huffBits = np.empty(nChunks+1).astype(dtype=np.uint16)
+                        huffBits[0] = nHuffBits
+                        for i in range(nChunks):  
+                            bits = pb.ReadBits(np.min([16, nHuffBits]))
+                            if (nHuffBits < 16):
+                                bits = bits << (16-nHuffBits)
+                            huffBits[i+1] = bits
+                            nHuffBits = nHuffBits - 16
+                        if huffBits.any():
+                            decoded = decode(huffBits, codingParams.encodingTrees[hTable - 1])
+                            mantissa[lowerLine:upperLine+1] = decoded
+
             # done unpacking data (end loop over scale factor bands)
-            
-            # CUSTOM DATA:
-            # < now can unpack any custom data passed in the nBytes of data >
 
             # (DECODE HERE) decode the unpacked data for this channel, overlap-and-add first half, and append it to the data array (saving other half for next overlap-and-add)
             decodedData = self.Decode(scaleFactor,bitAlloc,mantissa, overallScaleFactor,codingParams)
@@ -299,8 +322,6 @@ class PACFile(AudioFile):
         Writes a block of signed-fraction data to a PACFile object that has
         already executed OpenForWriting()"""
 
-        # combine this block of multi-channel data w/ the prior block's to prepare for MDCTs twice as long
-        #fullBlockData=[]
         # if status for data[iCh] is start or short
         if codingParams.state == 1 or codingParams.state == 2:
             # there are this many subblocks
@@ -326,9 +347,10 @@ class PACFile(AudioFile):
                                     )
                 # current pass's data is next pass's prior block data
                 codingParams.priorBlock[iCh] = tempData[iCh][np.arange(codingParams.b) + iBlk*codingParams.b]
-
             # (ENCODE HERE) Encode the full block of multi=channel data
-            (scaleFactor,bitAlloc,mantissa, overallScaleFactor) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
+            
+            (scaleFactor,bitAlloc,mantissa, overallScaleFactor,hTables,hBits) = self.Encode(fullBlockData,codingParams)  # returns a tuple with all the block-specific info not in the file header
+           
             
             if codingParams.state == 0: 
                 sfBands = codingParams.sfBandsLong
@@ -340,17 +362,17 @@ class PACFile(AudioFile):
             # for each channel, write the data to the output file
             for iCh in range(codingParams.nChannels):
                 # determine the size of this channel's data block and write it to the output file
-                nBytes = 2 # bits for blockType
-                nBytes += codingParams.nScaleBits  # bits for overall scale factor
+
+                nBytes = 2 + codingParams.nScaleBits  # bits for overall scale factor
                 for iBand in range(sfBands.nBands): # loop over each scale factor band to get its bits
-                    nBytes += codingParams.nMantSizeBits+codingParams.nScaleBits    # mantissa bit allocation and scale factor for that sf band
+                    nBytes += codingParams.nScaleBits + codingParams.nHuffTableBits + codingParams.nMantSizeBits # huff table code allocation
+                    # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
                     if bitAlloc[iCh][iBand]:
                         # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
                         nBytes += bitAlloc[iCh][iBand]*sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
+                if hTables[iCh] is not 0:
+                    nBytes += hBits[iCh]  # Add huffman coded bit allocation to nBytes
                 # end computing bits needed for this channel's data
-
-                # CUSTOM DATA:
-                # < now can add space for custom data, if desired>
 
                 # now convert the bits to bytes (w/ extra one if spillover beyond byte boundary)
                 if nBytes%BYTESIZE==0:  nBytes /= BYTESIZE
@@ -364,27 +386,28 @@ class PACFile(AudioFile):
                 # now pack the nBytes of data into the PackedBits object
                 pb.WriteBits(codingParams.state,2) # block type
                 pb.WriteBits(overallScaleFactor[iCh],codingParams.nScaleBits)  # overall scale factor
+                pb.WriteBits(hTables[iCh],codingParams.nHuffTableBits)         # huff table code
                 iMant=0  # index offset in mantissa array (because mantissas w/ zero bits are omitted)
                 for iBand in range(sfBands.nBands): # loop over each scale factor band to pack its data
                     ba = bitAlloc[iCh][iBand]
                     if ba: ba-=1  # if non-zero, store as one less (since no bit allocation of 1 bits/mantissa)
                     pb.WriteBits(ba,codingParams.nMantSizeBits)  # bit allocation for this band (written as one less if non-zero)
                     pb.WriteBits(scaleFactor[iCh][iBand],codingParams.nScaleBits)  # scale factor for this band (if bit allocation non-zero)
-                    #if codingParams.state ==0:
-                    #    nLines = codingParams.sfBandsLong.nLines
-                    #elif codingParams.state == 1 or codingParams.state == 3:
-                    #    nLines = codingParams.sfBandsTrans.nLines
-                    #else:
-                    #    nLines = codingParams.sfBandsShort.nLines
-
                     if bitAlloc[iCh][iBand]:
-                        for j in range(sfBands.nLines[iBand]):
-                            pb.WriteBits(mantissa[iCh][iMant+j],bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
-                        iMant += sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
-                # done packing (end loop over scale factor bands)
-
-                # CUSTOM DATA:
-                # < now can add in custom data if space allocated in nBytes above>
+                        if hTables[iCh] == 0:
+                            for j in range(sfBands.nLines[iBand]):
+                                pb.WriteBits(mantissa[iCh][iMant+j],bitAlloc[iCh][iBand])     # mantissas for this band (if bit allocation non-zero) and bit alloc <>1 so is 1 higher than the number
+                            iMant += sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
+                        else:
+                            nHuffBits = mantissa[iCh][iBand][0]
+                            pb.WriteBits(nHuffBits, codingParams.nHuffLengthBits)
+                            nChunks = len(mantissa[iCh][iBand])
+                            if nHuffBits%16:
+                                mantissa[iCh][iBand][nChunks-1] = mantissa[iCh][iBand][nChunks-1] >> (16-(nHuffBits%16))
+                            for j in range(1, nChunks-1):
+                                pb.WriteBits(mantissa[iCh][iBand][j], 16)
+                                nHuffBits -= 16
+                            pb.WriteBits(mantissa[iCh][iBand][nChunks-1], nHuffBits)
 
                 # finally, write the data in this channel's PackedBits object to the output file
                 self.fp.write(pb.GetPackedData())
@@ -445,17 +468,33 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "harp40_1.wav"
+    input_filename = "Audio/gspi35_1.wav"
     coded_filename = "coded.pac"
-    output_filename = "output.wav"
+    output_filename = "Output/full_german.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
         coded_filename = sys.argv[1][:-4] + ".pac"
         output_filename = sys.argv[1][:-4] + "_decoded.wav"
 
+    buildTable = 0  # flag to build new huffman table or not
+    nTables = 6     # how many huffman tables to load
 
-    print "\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
+    encodingTrees = []
+    encodingMaps = []
+    print "\n\tLoading Huffman Tables ...",
+
+    for i in range(1, nTables+1):
+        sys.stdout.write(".")  # just to signal how far we've gotten to user
+        sys.stdout.flush()
+        treePath = './Trees/encodingTree%d' % i
+        encodingTrees.append(pickle.load(open(treePath, 'r')))
+        sys.stdout.write(".")  # just to signal how far we've gotten to user
+        sys.stdout.flush()
+        mapPath = './Maps/encodingMap%d' % i
+        encodingMaps.append(pickle.load(open(mapPath, 'r')))
+
+    print "\n\nRunning the PAC coder ({} -> {} -> {}):".format(input_filename, coded_filename, output_filename)
     elapsed = time.time()
 
     for Direction in ("Encode", "Decode"):
@@ -474,6 +513,8 @@ if __name__=="__main__":
 
         # open input file
         codingParams=inFile.OpenForReading()  # (includes reading header)
+        codingParams.nHuffTableBits = 3
+        codingParams.nHuffLengthBits = 10
 
         # pass parameters to the output file
         if Direction == "Encode":
@@ -485,8 +526,9 @@ if __name__=="__main__":
             codingParams.nMDCTLinesTrans = (codingParams.nMDCTLinesLong+codingParams.nMDCTLinesShort)/2
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
-	    dataRate = 128000
-            codingParams.targetBitsPerSample = dataRate/(1.0*codingParams.sampleRate)
+            # dataRate = 128000
+            # codingParams.targetBitsPerSample = dataRate/(1.0*codingParams.sampleRate)
+            codingParams.targetBitsPerSample = 2.9
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLinesLong
             # Set block state
@@ -498,9 +540,20 @@ if __name__=="__main__":
             codingParams.prevState = 0
             # Initialize bit reservoir
             codingParams.reservoir = 0
+            # Huffman encoding map
+            codingParams.buildTable = buildTable
+
+            if buildTable:
+                codingParams.freqTable = [1e-16 for _ in range(2**16)]
+    
+            codingParams.encodingMaps = encodingMaps
+
+
         else: # "Decode"
             # set PCM parameters (the rest is same as set by PAC file on open)
             codingParams.bitsPerSample = 16
+            # Huffman decoding tree
+            codingParams.encodingTrees = encodingTrees
         # only difference is in setting up the output file parameters
 
         # open the output file
@@ -509,7 +562,6 @@ if __name__=="__main__":
         # Read the input file and pass its data to the output file to be written
         previousBlock = []                                  # Initialize previous block
         firstBlock = True                                   # Set first block
-        #secondBlock = False
         
         # read in the current block
         currentBlock=inFile.ReadDataBlock(codingParams)
@@ -527,7 +579,6 @@ if __name__=="__main__":
            
             # Only handle state transitions if we are encoding
             if Direction == "Encode" and nextBlock:
-                #print currentBlock[0].shape,nextBlock[0].shape
                 # Check for transient in currentBlock for any channel
                 if True: #not previousBlock == []:
                     isTrans = False
@@ -561,16 +612,10 @@ if __name__=="__main__":
                             codingParams.prevState = codingParams.state
                             codingParams.state = 0
 
-                #if codingParams.state == 1 or codingParams.state == 2:
-                #    for iCh in range(codingParams.nChannels):
-                #        plt.plot(np.concatenate((previousBlock[iCh],currentBlock[iCh])))
-                #    plt.show()
-
             # Update previousBlock, currentBlock
             previousBlock = currentBlock
             currentBlock = nextBlock
 
-            #print "start state: ",codingParams.state,
             if codingParams.state == 0:
                 sys.stdout.write("_ ")  # just to signal how far we've gotten to user
             elif codingParams.state == 1:
@@ -580,10 +625,7 @@ if __name__=="__main__":
             else:
                 sys.stdout.write("\\ ")
             outFile.WriteDataBlock(previousBlock,codingParams)
-            #print "end state: ",codingParams.state
 
-            #if Direction == "Encode":
-            #    print codingParams.state[0],codingParams.state[1] 
             sys.stdout.flush()
 
         # end loop over reading/writing the blocks
@@ -591,7 +633,18 @@ if __name__=="__main__":
         # close the files
         inFile.Close(codingParams)
         outFile.Close(codingParams)
+
+        if Direction == "Encode" and buildTable:
+            freqTable = codingParams.freqTable
     # end of loop over Encode/Decode
+
+    if buildTable:
+        print "\n\n\tBuilding Huffman Tables..."
+        encodingTree = buildEncodingTree(freqTable)
+        encodingMap = buildEncodingMap(encodingTree)
+
+        pickle.dump(encodingTree, open("./Trees/encodingTree6", "w"), 0)
+        pickle.dump(encodingMap, open("./Maps/encodingMap6", "w"), 0)
 
     elapsed = time.time()-elapsed
     print "\nDone with Encode/Decode test\n"

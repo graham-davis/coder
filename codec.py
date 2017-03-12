@@ -5,7 +5,7 @@ codec.py -- The actual encode/decode functions for the perceptual audio codec
 © 2009 Marina Bosi & Richard E. Goldberg -- All rights reserved
 -----------------------------------------------------------------------
 """
-
+import sys
 import numpy as np  # used for arrays
 
 # used by Encode and Decode
@@ -110,9 +110,10 @@ def EncodeSingleChannel(data,codingParams):
 
     # compute target mantissa bit budget for this block of halfN MDCT mantissas
     bitBudget = codingParams.targetBitsPerSample * halfN  # this is overall target bit rate
-    bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
-    bitBudget -= (codingParams.nHuffTableBits+ codingParams.nMantSizeBits)*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget -= 34         # Block type + nBytes bits
+    bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
+    bitBudget -= codingParams.nHuffTableBits # less huff table type bits
+    bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
     bitBudget += codingParams.reservoir # add reservoir bits to bit budget
 
     # window data for side chain FFT and also window and compute MDCT

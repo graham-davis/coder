@@ -88,11 +88,6 @@ Description of the PAC File Format:
         nMDCTLinesShort      little-endian unsigned long ("<L" format in struct)
         nScaleBits           little-endian unsigned short("<H" format in struct)
         nMantSizeBits        little-endian unsigned short("<H" format in struct)
-        nSFBands             little-endian unsigned long ("<L" format in struct)
-        for iBand in range(nSFBands):
-          nLinesLong[iBand]  little-endian unsigned short("<H" format in struct)
-          nLinesShort[iBand] little-endian unsigned short("<H" format in struct)
-          nLinesTrans[iBand] little-endian unsigned short("<H" format in struct)
 
     Each Data Block:  (reads data blocks until end of file hit)
 
@@ -334,7 +329,6 @@ class PACFile(AudioFile):
                 # get sizes of half blocks to pass to encode process
                 codingParams.a = codingParams.priorBlock[iCh].size
                 codingParams.b = codingParams.nMDCTLinesLong/numSubBlocks
-                test = tempData[iCh][:codingParams.b + iBlk*codingParams.b]
                 fullBlockData.append( 
                         np.concatenate( 
                             ( codingParams.priorBlock[iCh], 
@@ -365,7 +359,8 @@ class PACFile(AudioFile):
                     # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
                     if bitAlloc[iCh][iBand]:
                         # if non-zero bit allocation for this band, add in bits for scale factor and each mantissa (0 bits means zero)
-                        nBytes += bitAlloc[iCh][iBand]*sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
+                        if hTables[iCh] == 0:
+                            nBytes += bitAlloc[iCh][iBand]*sfBands.nLines[iBand]  # no bit alloc = 1 so actuall alloc is one higher
                 if hTables[iCh] is not 0:
                     nBytes += hBits[iCh]  # Add huffman coded bit allocation to nBytes
                 # end computing bits needed for this channel's data
@@ -464,9 +459,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/castanets.wav"
+    input_filename = "Castanets _original_.wav"
     coded_filename = "coded.pac"
-    output_filename = "Output/output.wav"
+    output_filename = "output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
@@ -522,9 +517,9 @@ if __name__=="__main__":
             codingParams.nMDCTLinesTrans = (codingParams.nMDCTLinesLong+codingParams.nMDCTLinesShort)/2
             codingParams.nScaleBits = 4
             codingParams.nMantSizeBits = 4
-            # dataRate = 128000
-            # codingParams.targetBitsPerSample = dataRate/(1.0*codingParams.sampleRate)
-            codingParams.targetBitsPerSample = 2.9
+            dataRate = 128000
+            codingParams.targetBitsPerSample = dataRate/(1.0*codingParams.sampleRate)
+            #codingParams.targetBitsPerSample = 2.9
             # tell the PCM file how large the block size is
             codingParams.nSamplesPerBlock = codingParams.nMDCTLinesLong
             # Set block state
@@ -583,7 +578,6 @@ if __name__=="__main__":
                             isTrans = True
 
                     if isTrans:
-                        #print "isTrans",
                         # Start transition window
                         if codingParams.state == 0 or codingParams.state == 3:
                             codingParams.prevState = codingParams.state
@@ -594,7 +588,6 @@ if __name__=="__main__":
                             codingParams.state = 2
                     # No transient in current block
                     else:
-                        #print "not Trans",
                         # Begin end transition if current state is short block
                         if codingParams.state == 1 or (codingParams.state == 2 and not codingParams.prevState == 1):
                             codingParams.prevState = codingParams.state

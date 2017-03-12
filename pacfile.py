@@ -201,8 +201,7 @@ class PACFile(AudioFile):
                         mantissa[codingParams.sfBands.lowerLine[iBand]:(codingParams.sfBands.upperLine[iBand]+1)] = m
                     # read huffman mantissas
                     else:
-                        nHuffBits = pb.ReadBits(16)
-
+                        nHuffBits = pb.ReadBits(codingParams.nHuffLengthBits)
                         nChunks = int(np.ceil(nHuffBits/16.))
                         huffBits = np.empty(nChunks+1).astype(dtype=np.uint16)
                         huffBits[0] = nHuffBits
@@ -325,7 +324,7 @@ class PACFile(AudioFile):
                         iMant += codingParams.sfBands.nLines[iBand]  # add to mantissa offset if we passed mantissas for this band
                     else:
                         nHuffBits = mantissa[iCh][iBand][0]
-                        pb.WriteBits(nHuffBits, 16)
+                        pb.WriteBits(nHuffBits, codingParams.nHuffLengthBits)
                         nChunks = len(mantissa[iCh][iBand])
                         if nHuffBits%16:
                             mantissa[iCh][iBand][nChunks-1] = mantissa[iCh][iBand][nChunks-1] >> (16-(nHuffBits%16))
@@ -430,6 +429,7 @@ if __name__=="__main__":
         # open input file
         codingParams=inFile.OpenForReading()  # (includes reading header)
         codingParams.nHuffTableBits = 3
+        codingParams.nHuffLengthBits = 10
 
         # pass parameters to the output file
         if Direction == "Encode":

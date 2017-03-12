@@ -127,7 +127,7 @@ def EncodeSingleChannel(data,codingParams):
                 # store Huffman coded mantissa
                 huffCode = huff.encode(m, codingParams.encodingMaps[h])
                 mHuff[h].append(huffCode)
-                huffBits[h] += 16 + huffCode[0]
+                huffBits[h] += codingParams.nHuffLengthBits + huffCode[0]
             # increment starting index
             iMant += nLines
         else:
@@ -150,7 +150,8 @@ def EncodeSingleChannel(data,codingParams):
             mantissa = mHuff[h]
 
     # calculate rollover bits for bit reservoir
-    codingParams.reservoir = np.min([bitBudget/2., bitBudget - optimalBits])
+    if huffTable == 0:
+        codingParams.reservoir = np.min([bitBudget/2., bitBudget - optimalBits])
 
     # else return normal fp mantissas
     return (scaleFactor, bitAlloc, mantissa, overallScale, huffTable, optimalBits)

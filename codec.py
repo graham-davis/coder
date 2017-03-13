@@ -114,7 +114,9 @@ def EncodeSingleChannel(data,codingParams):
     bitBudget -=  nScaleBits*(sfBands.nBands +1)  # less scale factor bits (including overall scale factor)
     bitBudget -= codingParams.nHuffTableBits # less huff table type bits
     bitBudget -= codingParams.nMantSizeBits*sfBands.nBands  # less mantissa bit allocation bits
-    bitBudget += codingParams.reservoir # add reservoir bits to bit budget
+    # bitBudget += codingParams.reservoir # add reservoir bits to bit budget
+    bitsFromRes = np.min([codingParams.reservoir, bitBudget])
+    codingParams.reservoir -= bitsFromRes
 
     # window data for side chain FFT and also window and compute MDCT
     timeSamples = data
@@ -133,7 +135,7 @@ def EncodeSingleChannel(data,codingParams):
     # compute SMRs in side chain FFT
     SMRs = CalcSMRs(timeSamples, mdctLines, overallScale, codingParams.sampleRate, sfBands)
     # perform bit allocation using SMR results
-    bitAlloc = BitAlloc(bitBudget, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
+    bitAlloc = BitAlloc(bitBudget+bitsFromRes, maxMantBits, sfBands.nBands, sfBands.nLines, SMRs)
 
     # given the bit allocations, quantize the mdct lines in each band
     scaleFactor = np.empty(sfBands.nBands,dtype=np.int32)
@@ -186,8 +188,7 @@ def EncodeSingleChannel(data,codingParams):
             mantissa = mHuff[h]
 
     # calculate rollover bits for bit reservoir
-    if huffTable == 0:
-        codingParams.reservoir = np.min([bitBudget/2., bitBudget - optimalBits])
+    codingParams.reservoir += np.max([bitBudget - optimalBits, 0])
 
     # else return normal fp mantissas
     return (scaleFactor, bitAlloc, mantissa, overallScale, huffTable, optimalBits)

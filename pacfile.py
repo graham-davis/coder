@@ -230,7 +230,6 @@ class PACFile(AudioFile):
                         nLines = codingParams.sfBandsShort.nLines[iBand]
                         lowerLine = codingParams.sfBandsShort.lowerLine[iBand]
                         upperLine = codingParams.sfBandsShort.upperLine[iBand]
-
                     
                     # read non huffman encoded mantissas
                     if hTable == 0:
@@ -459,7 +458,7 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Castanets _original_.wav"
+    input_filename = "Audio/spmg54_1.wav"
     coded_filename = "coded.pac"
     output_filename = "output.wav"
 

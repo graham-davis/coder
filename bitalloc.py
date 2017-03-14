@@ -147,7 +147,11 @@ def BitAlloc(bitBudget, maxMantBits, nBands, nLines, SMR):
         # calculate their NMRs
         NMRs = 6*bitAlloc[nzInd]-SMR[nzInd]
         # find the largest one
-        maxInd = nzInd[np.argmax(6*bitAlloc[nzInd]-SMR[nzInd])]    
+        if np.size(nzInd) == 1:
+            maxInd = nzInd
+        else:
+            maxInd = nzInd[np.argmax(6*bitAlloc[nzInd]-SMR[nzInd])]  
+
         # reduce it by the correct amount
         if bitAlloc[maxInd] > 2:
             # larger than 2, subtract 1

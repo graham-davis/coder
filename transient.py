@@ -29,9 +29,7 @@ def IsTransient(previousBlock, currentBlock):
     esHalf = np.sum(np.power(s.lfilter(b,a,currentBlock[N/2:]),2.0)) 
     teDiff = np.abs(efHalf - esHalf)
 
-    #print eDiff,cDiff,teDiff
-
-    if (eDiff > 0.5 and cDiff > 450) or eDiff > 20 or teDiff >= 1 or (cDiff > 2000 and teDiff > 0.4):
+    if (eDiff > -500) and (eDiff > 0.6 or cDiff > 5000) and ((eDiff > 0.5 and cDiff > 450 and teDiff > .006) or eDiff > 20 or teDiff >= 1 or (cDiff > 2000 and teDiff > 0.4)):
         return True
 
 #-----------------------------------------------------------------------------
@@ -42,8 +40,8 @@ if __name__ == "__main__":
     from pcmfile import * # to get access to WAV file handling
 
     #input_filename = "harp40_1.wav"
-    input_filename = "Castanets _original_.wav"
-    #input_filename = "gspi35_2.wav"
+    # input_filename = "Audio/castanets.wav"
+    input_filename = "Audio/harp40_1.wav"
 
     inFile= PCMFile(input_filename)
     codingParams=inFile.OpenForReading()  # (includes reading header)
@@ -81,10 +79,10 @@ if __name__ == "__main__":
         if previousBlock:
             #transSize.append(IsTransient(previousBlock[0],currentBlock[0]))
             #transSize.append(IsTransientPE(currentBlock[0],codingParams))
-            print test,
+            # print test,
             if IsTransient(previousBlock[0],currentBlock[0]):
                 transients.append(sample)
-                print '*'
+                # print '*'
 
         test += 1
 
@@ -115,9 +113,9 @@ if __name__ == "__main__":
     labelInts = np.arange(1,len(signal)/1024+1)
     labelInts += 1
     labels = map(str,labelInts)
-    for x in range(len(signal)/1024):
-        p.plot((1024*x,1024*x), (-1, 1), 'k--')
+    # for x in range(len(signal)/1024):
+    #     p.plot((1024*x,1024*x), (-1, 1), 'k--')
     
-    plt.xticks((labelInts-1)*1024,labels)
+    # plt.xticks((labelInts-1)*1024,labels)
     plt.show()
     

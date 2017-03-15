@@ -458,9 +458,9 @@ if __name__=="__main__":
     import time
     from pcmfile import * # to get access to WAV file handling
 
-    input_filename = "Audio/harp40_1.wav"
+    input_filename = "harp40_1.wav"
     coded_filename = "coded.pac"
-    output_filename = "Output/output.wav"
+    output_filename = "output.wav"
 
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]

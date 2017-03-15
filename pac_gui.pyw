@@ -12,6 +12,8 @@ import wx
 import os
 from pcmfile import * # to get access to PCM files
 from pacfile import * # to get access to perceptually coded files
+import cPickle as pickle 
+
 
 class MyFrame(wx.Frame):
     def __init__(self, *args, **kwds):
@@ -30,8 +32,10 @@ class MyFrame(wx.Frame):
         self.encodeGauge = wx.Gauge(self.notebook_1_pane_1, -1, 100)
         self.label_6 = wx.StaticText(self.notebook_1_pane_1, -1, "Decode Progress")
         self.decodeGauge = wx.Gauge(self.notebook_1_pane_1, -1, 100)
-        self.label_1 = wx.StaticText(self.notebook_1_pane_2, -1, "Number of MDCT Lines (1/2 Block)")
-        self.nMDCTLines = wx.TextCtrl(self.notebook_1_pane_2, -1, "1024")
+        self.label_1a = wx.StaticText(self.notebook_1_pane_2, -1, "Number of Long MDCT Lines (1/2 Block)")
+        self.nMDCTLinesLong = wx.TextCtrl(self.notebook_1_pane_2, -1, "1024")
+        self.label_1b = wx.StaticText(self.notebook_1_pane_2, -1, "Number of Short MDCT Lines (1/2 Block)")
+        self.nMDCTLinesShort = wx.TextCtrl(self.notebook_1_pane_2, -1, "128")
         self.label_2 = wx.StaticText(self.notebook_1_pane_2, -1, "Number of Scale Factor Bits")
         self.nScaleBits = wx.TextCtrl(self.notebook_1_pane_2, -1, "4")
         self.label_4 = wx.StaticText(self.notebook_1_pane_2, -1, "Number of Mantissa Size Bits")
@@ -51,7 +55,7 @@ class MyFrame(wx.Frame):
 
     def __do_layout(self):
         sizer_1 = wx.BoxSizer(wx.VERTICAL)
-        grid_sizer_1 = wx.GridSizer(4, 2, 2, 2)
+        grid_sizer_1 = wx.GridSizer(5, 2, 2, 2)
         sizer_2 = wx.BoxSizer(wx.VERTICAL)
         sizer_3 = wx.BoxSizer(wx.VERTICAL)
         sizer_5 = wx.BoxSizer(wx.VERTICAL)
@@ -70,8 +74,10 @@ class MyFrame(wx.Frame):
         sizer_2.Add(self.label_6, 0, wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL, 0)
         sizer_2.Add(self.decodeGauge, 0, wx.EXPAND, 0)
         self.notebook_1_pane_1.SetSizer(sizer_2)
-        grid_sizer_1.Add(self.label_1, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
-        grid_sizer_1.Add(self.nMDCTLines, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
+        grid_sizer_1.Add(self.label_1a, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
+        grid_sizer_1.Add(self.nMDCTLinesLong, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
+        grid_sizer_1.Add(self.label_1b, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
+        grid_sizer_1.Add(self.nMDCTLinesShort, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
         grid_sizer_1.Add(self.label_2, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
         grid_sizer_1.Add(self.nScaleBits, 1, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
         grid_sizer_1.Add(self.label_4, 0, wx.ALL|wx.ALIGN_CENTER_VERTICAL, 0)
@@ -139,7 +145,8 @@ class MyFrame(wx.Frame):
             inFilename=self.inFile.GetValue()
             outFilename=inFilename.replace(".wav",self.outFileAppend.Value+".wav")
             codeFilename=outFilename.replace(".wav",".pac")
-            nMDCTLines = int(self.nMDCTLines.GetValue())
+            nMDCTLinesLong = int(self.nMDCTLinesLong.GetValue())
+            nMDCTLinesShort = int(self.nMDCTLinesShort.GetValue())
             nScaleBits = int(self.nScaleBits.GetValue())
             nMantSizeBits = int(self.nMantSizeBits.GetValue())
             targetBitsPerSample = float(self.targetBitsPerSample.GetValue())
@@ -169,7 +176,7 @@ class MyFrame(wx.Frame):
 
                 # open input file
                 codingParams=inFile.OpenForReading()
-                nBlocks = codingParams.numSamples/nMDCTLines #roughly number of blocks to process
+                nBlocks = codingParams.numSamples/nMDCTLinesLong #roughly number of blocks to process
                 codingParams.nHuffTableBits = 3
                 codingParams.nHuffLengthBits = 10
 
@@ -178,11 +185,11 @@ class MyFrame(wx.Frame):
                 if Direction == "Encode":
                     # set additional parameters that are needed for PAC file
                     # (beyond those set by the PCM file on open)
-                    codingParams.nMDCTLinesLong = nMDCTLines
+                    codingParams.nMDCTLinesLong = nMDCTLinesLong
                     codingParams.nScaleBits = nScaleBits
                     codingParams.nMantSizeBits = nMantSizeBits
                     codingParams.targetBitsPerSample = targetBitsPerSample
-                    codingParams.nMDCTLinesShort = 128
+                    codingParams.nMDCTLinesShort = nMDCTLinesShort
                     codingParams.nMDCTLinesTrans = (codingParams.nMDCTLinesLong+codingParams.nMDCTLinesShort)/2
                     # tell the PCM file how large the block size is
                     codingParams.nSamplesPerBlock = codingParams.nMDCTLinesLong
@@ -264,8 +271,9 @@ class MyFrame(wx.Frame):
                     currentBlock = nextBlock
 
                     outFile.WriteDataBlock(previousBlock,codingParams)
-                    #update progress bar
-                    iBlock +=1
+                    #update progress bar while it's less than 100%
+                    if iBlock/nBlocks < 1:
+                        iBlock +=1
                     gauge.SetValue(100*iBlock/nBlocks)  # set new value
                     gauge.Refresh()     # make sure it knows to refresh
                     wx.GetApp().Yield(True)  # yields time to other events (i.e. gauge.Refresh()) waiting
@@ -275,6 +283,8 @@ class MyFrame(wx.Frame):
                 outFile.Close(codingParams)
                 gauge.SetValue(100)
             # end of loop over Encode/Decode
+
+            print "Made it!"
 
             # we're done - give user GUI control and tell them we're done
             self.goButton.Enable() # allow access again now

@@ -11,7 +11,8 @@ def IsTransient(previousBlock, currentBlock):
     """
     N = len(currentBlock)
     W = np.arange(1, N+1)
-    
+
+    # Butterworth filter coefficients with cutoff frequency of
     b,a = s.butter(4,0.35,'high')
     
     # Calculations for spectral energy difference between current and previous block
